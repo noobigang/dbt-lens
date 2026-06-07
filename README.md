@@ -90,6 +90,18 @@ No environment variables. No config. Done.
 
 ---
 
+## 🖼️ Sample output
+
+Here's what you get when you load the bundled example project (score: 66/100, Grade C):
+
+**Share card** (1200×630, ready for LinkedIn):
+![dbt Lens share card](data/sample_score_card.png)
+
+**Score header** (the first thing you see after loading a manifest):
+![dbt Lens score header](data/sample_score_header.png)
+
+---
+
 ## 📈 v2 — Public Leaderboard
 
 Coming soon: submit your project's GitHub URL and get ranked against the community. Viral loop: every submitter shares their score → their network sees it → some submit too.
