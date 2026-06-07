@@ -1,0 +1,32 @@
+[
+  {
+    "key": "jaffle_shop",
+    "display_name": "jaffle_shop",
+    "repo_url": "https://github.com/dbt-labs/jaffle_shop",
+    "score": 78
+  },
+  {
+    "key": "dbt_utils",
+    "display_name": "dbt-labs/dbt-utils",
+    "repo_url": "https://github.com/dbt-labs/dbt-utils",
+    "score": 85
+  },
+  {
+    "key": "jaffle_shop_duckdb",
+    "display_name": "dbt-labs/jaffle_shop_duckdb",
+    "repo_url": "https://github.com/dbt-labs/jaffle_shop_duckdb",
+    "score": 72
+  },
+  {
+    "key": "dbt_date",
+    "display_name": "calogica/dbt-date",
+    "repo_url": "https://github.com/calogica/dbt-date",
+    "score": 68
+  },
+  {
+    "key": "dbt_expectations",
+    "display_name": "dbt-labs/dbt-expectations",
+    "repo_url": "https://github.com/calogica/dbt-expectations",
+    "score": 90
+  }
+]

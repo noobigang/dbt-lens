@@ -1,0 +1,260 @@
+{
+  "metadata": {
+    "project_name": "example_warehouse",
+    "dbt_version": "1.7.4",
+    "generated_at": "2026-06-07T22:00:00.000000Z",
+    "adapter_type": "postgres",
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v11.json"
+  },
+  "nodes": {
+    "model.example_warehouse.stg_customers": {
+      "name": "stg_customers",
+      "resource_type": "model",
+      "schema": "staging",
+      "database": "ANALYTICS",
+      "config": {"materialized": "view"},
+      "description": "Cleaned customer records, one row per customer.",
+      "original_file_path": "models/staging/stg_customers.sql",
+      "depends_on": {"nodes": ["source.example_warehouse.jaffle_data.customers"]},
+      "columns": {
+        "customer_id": {"description": "Surrogate primary key for a customer."},
+        "first_name": {"description": "Customer's first name."},
+        "last_name": {"description": "Customer's last name."},
+        "email": {"description": "Customer's email address."}
+      }
+    },
+    "model.example_warehouse.stg_orders": {
+      "name": "stg_orders",
+      "resource_type": "model",
+      "schema": "staging",
+      "database": "ANALYTICS",
+      "config": {"materialized": "view"},
+      "description": "Cleaned order records, one row per order.",
+      "original_file_path": "models/staging/stg_orders.sql",
+      "depends_on": {"nodes": ["source.example_warehouse.jaffle_data.orders"]},
+      "columns": {
+        "order_id": {"description": "Surrogate primary key for an order."},
+        "customer_id": {"description": "Foreign key to stg_customers."},
+        "order_date": {"description": "Date the order was placed."},
+        "status": {"description": "Order status: shipped / completed / pending."}
+      }
+    },
+    "model.example_warehouse.stg_payments": {
+      "name": "stg_payments",
+      "resource_type": "model",
+      "schema": "staging",
+      "database": "ANALYTICS",
+      "config": {"materialized": "view"},
+      "description": "",
+      "original_file_path": "models/staging/stg_payments.sql",
+      "depends_on": {"nodes": ["source.example_warehouse.jaffle_data.payments"]},
+      "columns": {
+        "payment_id": {"description": "Surrogate primary key."},
+        "order_id": {"description": "FK to stg_orders."},
+        "amount": {"description": ""}
+      }
+    },
+    "model.example_warehouse.int_orders_pivoted": {
+      "name": "int_orders_pivoted",
+      "resource_type": "model",
+      "schema": "intermediate",
+      "database": "ANALYTICS",
+      "config": {"materialized": "view"},
+      "description": "Orders joined with payment totals, one row per order.",
+      "original_file_path": "models/intermediate/int_orders_pivoted.sql",
+      "depends_on": {
+        "nodes": [
+          "model.example_warehouse.stg_orders",
+          "model.example_warehouse.stg_payments"
+        ]
+      },
+      "columns": {
+        "order_id": {"description": "FK to stg_orders."},
+        "customer_id": {"description": "FK to stg_customers."},
+        "total_amount": {"description": "Sum of payments for the order."}
+      }
+    },
+    "model.example_warehouse.int_customers_aggregated": {
+      "name": "int_customers_aggregated",
+      "resource_type": "model",
+      "schema": "intermediate",
+      "database": "ANALYTICS",
+      "config": {"materialized": "view"},
+      "description": "",
+      "original_file_path": "models/intermediate/int_customers_aggregated.sql",
+      "depends_on": {
+        "nodes": [
+          "model.example_warehouse.stg_customers",
+          "model.example_warehouse.int_orders_pivoted"
+        ]
+      },
+      "columns": {
+        "customer_id": {"description": ""},
+        "first_order_date": {"description": ""},
+        "most_recent_order_date": {"description": ""},
+        "number_of_orders": {"description": ""},
+        "customer_lifetime_value": {"description": ""}
+      }
+    },
+    "model.example_warehouse.fct_orders": {
+      "name": "fct_orders",
+      "resource_type": "model",
+      "schema": "marts",
+      "database": "ANALYTICS",
+      "config": {"materialized": "incremental", "unique_key": "order_id"},
+      "description": "One row per order with payment totals and customer lifetime value.",
+      "original_file_path": "models/marts/fct_orders.sql",
+      "depends_on": {
+        "nodes": ["model.example_warehouse.int_orders_pivoted"]
+      },
+      "columns": {
+        "order_id": {"description": "Surrogate primary key."},
+        "customer_id": {"description": "FK to dim_customers."},
+        "order_date": {"description": ""},
+        "status": {"description": ""},
+        "total_amount": {"description": "Sum of payments for the order."}
+      }
+    },
+    "model.example_warehouse.dim_customers": {
+      "name": "dim_customers",
+      "resource_type": "model",
+      "schema": "marts",
+      "database": "ANALYTICS",
+      "config": {"materialized": "table"},
+      "description": "Customer dimension with lifetime metrics.",
+      "original_file_path": "models/marts/dim_customers.sql",
+      "depends_on": {
+        "nodes": ["model.example_warehouse.int_customers_aggregated"]
+      },
+      "columns": {
+        "customer_id": {"description": "Surrogate primary key."},
+        "first_name": {"description": ""},
+        "last_name": {"description": ""},
+        "first_order_date": {"description": ""},
+        "most_recent_order_date": {"description": ""},
+        "number_of_orders": {"description": ""},
+        "customer_lifetime_value": {"description": ""}
+      }
+    },
+    "model.example_warehouse.order_summary": {
+      "name": "order_summary",
+      "resource_type": "model",
+      "schema": "marts",
+      "database": "ANALYTICS",
+      "config": {"materialized": "view"},
+      "description": "A rollup of orders by day. (No fct_ prefix — naming slip.)",
+      "original_file_path": "models/marts/order_summary.sql",
+      "depends_on": {
+        "nodes": ["model.example_warehouse.fct_orders"]
+      },
+      "columns": {
+        "order_date": {"description": ""},
+        "order_count": {"description": ""},
+        "gross_revenue": {"description": ""}
+      }
+    },
+
+    "test.example_warehouse.not_null_stg_customers_customer_id": {
+      "name": "not_null_stg_customers_customer_id",
+      "resource_type": "test",
+      "depends_on": {"nodes": ["model.example_warehouse.stg_customers"]},
+      "test_metadata": {"name": "not_null"}
+    },
+    "test.example_warehouse.unique_stg_customers_customer_id": {
+      "name": "unique_stg_customers_customer_id",
+      "resource_type": "test",
+      "depends_on": {"nodes": ["model.example_warehouse.stg_customers"]},
+      "test_metadata": {"name": "unique"}
+    },
+    "test.example_warehouse.not_null_stg_orders_order_id": {
+      "name": "not_null_stg_orders_order_id",
+      "resource_type": "test",
+      "depends_on": {"nodes": ["model.example_warehouse.stg_orders"]},
+      "test_metadata": {"name": "not_null"}
+    },
+    "test.example_warehouse.unique_stg_orders_order_id": {
+      "name": "unique_stg_orders_order_id",
+      "resource_type": "test",
+      "depends_on": {"nodes": ["model.example_warehouse.stg_orders"]},
+      "test_metadata": {"name": "unique"}
+    },
+    "test.example_warehouse.not_null_fct_orders_order_id": {
+      "name": "not_null_fct_orders_order_id",
+      "resource_type": "test",
+      "depends_on": {"nodes": ["model.example_warehouse.fct_orders"]},
+      "test_metadata": {"name": "not_null"}
+    },
+    "test.example_warehouse.unique_fct_orders_order_id": {
+      "name": "unique_fct_orders_order_id",
+      "resource_type": "test",
+      "depends_on": {"nodes": ["model.example_warehouse.fct_orders"]},
+      "test_metadata": {"name": "unique"}
+    },
+    "test.example_warehouse.relationships_fct_orders_customer_id": {
+      "name": "relationships_fct_orders_customer_id",
+      "resource_type": "test",
+      "depends_on": {"nodes": ["model.example_warehouse.fct_orders"]},
+      "test_metadata": {"name": "relationships"}
+    },
+    "test.example_warehouse.not_null_dim_customers_customer_id": {
+      "name": "not_null_dim_customers_customer_id",
+      "resource_type": "test",
+      "depends_on": {"nodes": ["model.example_warehouse.dim_customers"]},
+      "test_metadata": {"name": "not_null"}
+    },
+    "test.example_warehouse.unique_dim_customers_customer_id": {
+      "name": "unique_dim_customers_customer_id",
+      "resource_type": "test",
+      "depends_on": {"nodes": ["model.example_warehouse.dim_customers"]},
+      "test_metadata": {"name": "unique"}
+    }
+  },
+  "sources": {
+    "source.example_warehouse.jaffle_data.customers": {
+      "name": "customers",
+      "source_name": "jaffle_data",
+      "identifier": "raw_customers",
+      "description": "Raw customer data ingested from the production OLTP database.",
+      "columns": {
+        "id": {"description": "Production customer ID."},
+        "first_name": {"description": ""},
+        "last_name": {"description": ""},
+        "email": {"description": ""}
+      }
+    },
+    "source.example_warehouse.jaffle_data.orders": {
+      "name": "orders",
+      "source_name": "jaffle_data",
+      "identifier": "raw_orders",
+      "description": "Raw order events.",
+      "columns": {
+        "id": {"description": "Production order ID."},
+        "customer_id": {"description": ""},
+        "order_date": {"description": ""},
+        "status": {"description": ""}
+      }
+    },
+    "source.example_warehouse.jaffle_data.payments": {
+      "name": "payments",
+      "source_name": "jaffle_data",
+      "identifier": "raw_payments",
+      "description": "Raw payment events.",
+      "columns": {
+        "id": {"description": "Production payment ID."},
+        "order_id": {"description": ""},
+        "amount": {"description": ""}
+      }
+    }
+  },
+  "exposures": {
+    "exposure.example_warehouse.weekly_revenue_dashboard": {
+      "name": "weekly_revenue_dashboard",
+      "type": "dashboard",
+      "maturity": "high",
+      "description": "Weekly revenue and order volume dashboard consumed by the GTM team.",
+      "depends_on": {
+        "nodes": ["model.example_warehouse.fct_orders"]
+      }
+    }
+  }
+}
