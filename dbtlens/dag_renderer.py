@@ -187,8 +187,9 @@ def render_with_agraph(nodes: list[DagNode], edges: list[DagEdge]) -> Any:
             color=n.color,
             title=n.title,
             shape=n.shape,
-            size=25,
-            font={"color": "#111", "size": 14},
+            size=28,
+            font={"color": "#fff", "size": 13},
+            borderWidth=2,
         )
         for n in nodes
     ]
@@ -198,13 +199,13 @@ def render_with_agraph(nodes: list[DagNode], edges: list[DagEdge]) -> Any:
     ]
     config = Config(
         width=1000,
-        height=650,
+        height=680,
         directed=True,
         physics=True,
         hierarchical=False,
         nodeHighlightBehavior=True,
         collapsible=False,
-        highlightColor="#F7A7A6",
+        highlightColor="#d4af37",
         maxZoom=2.5,
         minZoom=0.3,
     )
@@ -221,57 +222,188 @@ _VIS_HTML = r"""
 <html>
 <head>
 <meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script type="text/javascript" src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
 <style>
-  #lens-dag { width: 100%; height: 650px; border: 1px solid #e5e7eb; border-radius: 8px; }
-  .legend {
-    position: absolute; top: 12px; right: 12px; background: white;
-    padding: 10px 14px; border-radius: 8px; font-family: -apple-system, system-ui, sans-serif;
-    font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f172a; font-family: 'Inter', -apple-system, sans-serif; }
+  .dag-wrapper {
+    position: relative;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    border-radius: 16px;
+    overflow: hidden;
+    padding: 20px;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 25px 50px rgba(0,0,0,0.4);
   }
-  .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .dag-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 0 4px;
+  }
+  .dag-title {
+    color: #f8fafc;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dag-title span { color: #d4af37; font-size: 18px; }
+  .dag-badge {
+    background: rgba(212,175,55,0.15);
+    border: 1px solid rgba(212,175,55,0.3);
+    color: #d4af37;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  #lens-dag {
+    width: 100%; height: 580px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.02);
+  }
+  .legend {
+    position: absolute; top: 72px; right: 32px;
+    background: rgba(15,23,42,0.92);
+    backdrop-filter: blur(12px);
+    padding: 16px 18px; border-radius: 12px;
+    font-size: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    min-width: 180px;
+  }
+  .legend-title {
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 7px;
+    color: #cbd5e1;
+    font-weight: 500;
+  }
+  .legend-row:last-child { margin-bottom: 0; }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%; margin-right: 9px;
+    flex-shrink: 0; border: 2px solid rgba(255,255,255,0.15);
+  }
+  .controls {
+    position: absolute; bottom: 32px; right: 32px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .ctrl-btn {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: rgba(15,23,42,0.9);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #94a3b8; font-size: 16px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    backdrop-filter: blur(8px);
+  }
+  .ctrl-btn:hover { background: rgba(212,175,55,0.2); color: #d4af37; border-color: rgba(212,175,55,0.4); }
+  .node-count {
+    position: absolute; bottom: 32px; left: 32px;
+    background: rgba(15,23,42,0.9);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #64748b; font-size: 12px; font-weight: 500;
+    padding: 8px 14px; border-radius: 20px;
+    backdrop-filter: blur(8px);
+  }
 </style>
 </head>
 <body>
-<div style="position: relative;">
+<div class="dag-wrapper">
+  <div class="dag-header">
+    <div class="dag-title"><span>🔬</span> dbt Lens — Project DAG</div>
+    <div class="dag-badge">Interactive</div>
+  </div>
   <div id="lens-dag"></div>
   <div class="legend">
-    <div><span class="dot" style="background:#22c55e"></span> Healthy</div>
-    <div><span class="dot" style="background:#eab308"></span> Tests only</div>
-    <div><span class="dot" style="background:#f97316"></span> Docs only</div>
-    <div><span class="dot" style="background:#ef4444"></span> Untested & undocumented</div>
-    <div><span class="dot" style="background:#3b82f6"></span> Source</div>
-    <div><span class="dot" style="background:#a855f7"></span> Exposure</div>
+    <div class="legend-title">Model Health</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#22c55e;border-color:#16a34a"></div> Healthy (tested & documented)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#eab308;border-color:#ca8a04"></div> Tests only</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#f97316;border-color:#ea580c"></div> Docs only</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ef4444;border-color:#dc2626"></div> Neither</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#3b82f6;border-color:#2563eb"></div> Source</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#a855f7;border-color:#9333ea"></div> Exposure</div>
   </div>
+  <div class="controls">
+    <button class="ctrl-btn" onclick="network.zoomIn()" title="Zoom in">+</button>
+    <button class="ctrl-btn" onclick="network.zoomOut()" title="Zoom out">−</button>
+    <button class="ctrl-btn" onclick="network.fit({animation:{duration:500,easingFunction:'easeInOutQuad'}})" title="Fit">⊡</button>
+  </div>
+  <div class="node-count" id="nodeCount"></div>
 </div>
 <script type="text/javascript">
   var data = __DATA__;
   var container = document.getElementById('lens-dag');
+  document.getElementById('nodeCount').textContent = data.nodes.length + ' nodes · ' + data.edges.length + ' edges';
   var options = {
     nodes: {
-      shape: 'box',
-      margin: 10,
-      font: { color: '#111', size: 14, face: '-apple-system, system-ui, sans-serif' }
+      borderWidth: 2,
+      shadow: { enabled: true, color: 'rgba(0,0,0,0.4)', size: 8, x: 0, y: 3 },
+      font: { color: '#fff', size: 13, face: 'Inter, -apple-system, sans-serif', strokeWidth: 3, strokeColor: 'rgba(15,23,42,0.8)' },
+      margin: { top: 8, right: 12, bottom: 8, left: 12 },
     },
     edges: {
-      color: '#94a3b8',
-      arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-      smooth: { type: 'continuous' }
+      color: { color: 'rgba(148,163,184,0.4)', highlight: '#d4af37', hover: '#d4af37' },
+      width: 1.5,
+      arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+      smooth: { type: 'cubicBezier', roundness: 0.3 }
     },
     physics: {
       enabled: true,
       solver: 'forceAtlas2Based',
-      forceAtlas2Based: { gravitationalConstant: -45, springLength: 110, springConstant: 0.08 },
-      stabilization: { iterations: 200 }
+      forceAtlas2Based: { gravitationalConstant: -50, springLength: 130, springConstant: 0.08, damping: 0.4 },
+      stabilization: { iterations: 250 }
     },
-    interaction: { hover: true, tooltipDelay: 100, zoomView: true, dragView: true }
+    interaction: {
+      hover: true,
+      tooltipDelay: 80,
+      zoomView: true,
+      dragView: true,
+      keyboard: true,
+      navigationButtons: false
+    }
   };
   var network = new vis.Network(container, data, options);
-  network.once('stabilizationIterationsDone', function() { network.setOptions({ physics: false }); });
+  network.once('stabilizationIterationsDone', function() { network.setOptions({ physics: { enabled: false } }); });
+  network.on('hoverNode', function(props) {
+    document.body.style.cursor = 'pointer';
+  });
+  network.on('blurrNode', function(props) {
+    document.body.style.cursor = 'default';
+  });
 </script>
 </body>
 </html>
 """
+
+
+_HEALTH_BORDER = {
+    HEALTHY: "#16a34a",
+    SEMI_DOC: "#ca8a04",
+    SEMI_TEST: "#ea580c",
+    UNHEALTHY: "#dc2626",
+    SOURCE: "#2563eb",
+    EXPOSURE: "#9333ea",
+}
 
 
 def render_with_vis_html(
@@ -282,15 +414,38 @@ def render_with_vis_html(
         "nodes": [
             {
                 "id": n.id,
-                "label": n.label,
-                "color": {"background": n.color, "border": n.color},
+                "label": f"<b>{n.label}</b>",
+                "color": {
+                    "background": n.color,
+                    "border": _HEALTH_BORDER.get(n.id.split(".")[0], n.color),
+                    "highlight": {"background": n.color, "border": "#d4af37"},
+                },
+                "borderWidth": 2,
+                "borderWidthSelected": 3,
+                "font": {
+                    "color": "#f8fafc",
+                    "size": 13,
+                    "face": "Inter, -apple-system, sans-serif",
+                    "strokeWidth": 3,
+                    "strokeColor": "rgba(15,23,42,0.9)",
+                },
+                "shadow": {"enabled": True, "color": "rgba(0,0,0,0.5)", "size": 10, "x": 0, "y": 4},
                 "title": n.title,
                 "shape": n.shape,
+                "size": 22,
+                "margin": {"top": 8, "right": 12, "bottom": 8, "left": 12},
             }
             for n in nodes
         ],
         "edges": [
-            {"from": e.source, "to": e.target} for e in edges
+            {
+                "from": e.source,
+                "to": e.target,
+                "color": {"color": "rgba(148,163,184,0.5)", "highlight": "#d4af37", "hover": "#d4af37"},
+                "width": 1.5,
+                "arrows": {"to": {"enabled": True, "scaleFactor": 0.6}},
+            }
+            for e in edges
         ],
     }
     return _VIS_HTML.replace("__DATA__", json.dumps(payload))
@@ -324,7 +479,7 @@ def render_dag(snapshot: ProjectSnapshot) -> None:
         )
 
     html = render_with_vis_html(nodes, edges)
-    st.components.v1.html(html, height=700, scrolling=False)
+    st.components.v1.html(html, height=720, scrolling=False)
 
 
 __all__ = [

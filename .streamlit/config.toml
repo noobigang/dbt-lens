@@ -1,5 +1,4 @@
 [theme]
-base = "light"
 primaryColor = "#d4af37"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f8fafc"
@@ -13,3 +12,8 @@ maxUploadSize = 200
 
 [browser]
 gatherUsageStats = false
+serverAddress = "localhost"
+
+[client]
+showErrorDetails = false
+toolbarMode = "minimal"

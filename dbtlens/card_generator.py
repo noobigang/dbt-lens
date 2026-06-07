@@ -173,78 +173,108 @@ def generate_card(
     img = _gradient_bg(CARD_W, CARD_H)
     draw = ImageDraw.Draw(img)
 
+    # --- Accent stripe on left edge ---
+    draw.rectangle((0, 0, 6, CARD_H), fill=ACCENT)
+
     # --- Top-left brand mark ---
-    brand_font = _load_font(_FONT_CANDIDATES_BOLD, 28)
-    draw.text((60, 50), "dbt Lens", font=brand_font, fill=ACCENT)
-    sub_brand = _load_font(_FONT_CANDIDATES_REG, 18)
-    draw.text((60, 90), "Health Score", font=sub_brand, fill=TEXT_SECONDARY)
+    brand_font = _load_font(_FONT_CANDIDATES_BOLD, 26)
+    draw.text((48, 42), "dbt Lens", font=brand_font, fill=ACCENT)
+    sub_brand = _load_font(_FONT_CANDIDATES_REG, 17)
+    draw.text((48, 78), "Health Score", font=sub_brand, fill=TEXT_SECONDARY)
 
-    # --- Big score (left side) ---
-    big_font = _load_font(_FONT_CANDIDATES_BOLD, 180)
+    # --- Divider line ---
+    draw.rectangle((48, 110, 560, 111), fill=(100, 116, 139))
+
+    # --- Big score (center-left) ---
+    big_font = _load_font(_FONT_CANDIDATES_BOLD, 200)
     score_text = str(score)
-    _draw_text_centered(draw, score_text, big_font, (340, 360), _score_color(score))
+    _draw_text_centered(draw, score_text, big_font, (300, 340), _score_color(score))
 
-    # --- "/100" denominator (smaller, right next to the score) ---
-    slash_font = _load_font(_FONT_CANDIDATES_REG, 56)
+    # --- "/100" denominator ---
+    slash_font = _load_font(_FONT_CANDIDATES_REG, 52)
     bbox = draw.textbbox((0, 0), score_text, font=big_font)
     score_w = bbox[2] - bbox[0]
-    _draw_text_left(
-        draw, "/100", slash_font, 340 + score_w // 2 + 40, 360, TEXT_SECONDARY
-    )
+    _draw_text_left(draw, "/100", slash_font, 300 + score_w // 2 + 30, 340, TEXT_SECONDARY)
 
-    # --- Grade badge (right of score) ---
+    # --- Grade badge ---
     if grade:
-        grade_font = _load_font(_FONT_CANDIDATES_BOLD, 96)
+        grade_font = _load_font(_FONT_CANDIDATES_BOLD, 110)
         _draw_text_centered(
-            draw, grade, grade_font, (340 + score_w // 2 + 240, 360), ACCENT
+            draw, grade, grade_font, (300 + score_w // 2 + 280, 340), ACCENT
         )
 
-    # --- Project name (below the score) ---
-    name_font = _load_font(_FONT_CANDIDATES_BOLD, 44)
-    _draw_text_centered(draw, name, name_font, (340, 510), TEXT_PRIMARY)
+    # --- Project name ---
+    name_font = _load_font(_FONT_CANDIDATES_BOLD, 42)
+    _draw_text_centered(draw, name, name_font, (300, 490), TEXT_PRIMARY)
 
-    # --- Verdict tagline (under the name) ---
+    # --- Verdict tagline ---
     verdict = _verdict_for(score)
-    verdict_font = _load_font(_FONT_CANDIDATES_LIGHT, 22)
-    _draw_text_centered(draw, verdict, verdict_font, (340, 560), TEXT_SECONDARY)
+    verdict_font = _load_font(_FONT_CANDIDATES_LIGHT, 21)
+    _draw_text_centered(draw, verdict, verdict_font, (300, 545), TEXT_SECONDARY)
 
-    # --- Right-side bar showing 0..100 position ---
-    bar_x0, bar_y0 = 780, 280
-    bar_w, bar_h = 340, 24
-    # background track
+    # --- Right panel: score band + scan badge ---
+    panel_x = 660
+    # Panel background
     draw.rounded_rectangle(
-        (bar_x0, bar_y0, bar_x0 + bar_w, bar_y0 + bar_h), radius=12, fill=(51, 65, 85)
+        (panel_x, 120, panel_x + 500, CARD_H - 50),
+        radius=16,
+        fill=(30, 41, 59),
     )
-    # filled portion
-    fill_w = max(2, int(bar_w * (score / 100.0)))
+
+    # Score band section
+    bar_x0, bar_y0 = panel_x + 40, 170
+    bar_w, bar_h = 400, 28
+
+    band_label_font = _load_font(_FONT_CANDIDATES_BOLD, 17)
+    draw.text((bar_x0, bar_y0 - 30), "SCORE", font=band_label_font, fill=TEXT_SECONDARY)
+
+    # track
+    draw.rounded_rectangle(
+        (bar_x0, bar_y0, bar_x0 + bar_w, bar_y0 + bar_h), radius=14, fill=(51, 65, 85)
+    )
+    fill_w = max(4, int(bar_w * (score / 100.0)))
     draw.rounded_rectangle(
         (bar_x0, bar_y0, bar_x0 + fill_w, bar_y0 + bar_h),
-        radius=12,
+        radius=14,
         fill=_score_color(score),
     )
     # tick labels
-    tick_font = _load_font(_FONT_CANDIDATES_REG, 16)
+    tick_font = _load_font(_FONT_CANDIDATES_REG, 15)
     for tick in (0, 25, 50, 75, 100):
         tx = bar_x0 + int(bar_w * (tick / 100.0))
-        draw.text((tx - 6, bar_y0 + bar_h + 8), str(tick), font=tick_font, fill=TEXT_SECONDARY)
-    # caption above the bar
-    bar_caption = _load_font(_FONT_CANDIDATES_BOLD, 18)
+        draw.text((tx - 5, bar_y0 + bar_h + 6), str(tick), font=tick_font, fill=TEXT_SECONDARY)
+
+    # Grade + verdict in panel
+    if grade:
+        grade_big_font = _load_font(_FONT_CANDIDATES_BOLD, 80)
+        _draw_text_centered(draw, grade, grade_big_font, (panel_x + 250, 330), ACCENT)
+        grade_label_font = _load_font(_FONT_CANDIDATES_REG, 16)
+        draw.text((panel_x + 40, 390), "GRADE", font=grade_label_font, fill=TEXT_SECONDARY)
+
+    verdict_panel_font = _load_font(_FONT_CANDIDATES_LIGHT, 18)
+    _draw_text_centered(draw, verdict, verdict_panel_font, (panel_x + 250, 450), TEXT_SECONDARY)
+
+    # Scan badge
+    draw.rounded_rectangle(
+        (panel_x + 40, 490, panel_x + 460, 540),
+        radius=10,
+        fill=(212, 175, 55, 30),
+    )
+    scan_font = _load_font(_FONT_CANDIDATES_BOLD, 16)
     draw.text(
-        (bar_x0, bar_y0 - 32), "SCORE BAND", font=bar_caption, fill=TEXT_SECONDARY
+        (panel_x + 60, 502),
+        f"🔬  Scanned with dbt Lens",
+        font=scan_font,
+        fill=ACCENT,
     )
 
     # --- Footer URL (bottom right) ---
-    footer_font = _load_font(_FONT_CANDIDATES_REG, 20)
+    footer_font = _load_font(_FONT_CANDIDATES_REG, 18)
     bbox = draw.textbbox((0, 0), footer_url, font=footer_font)
     fw = bbox[2] - bbox[0]
     draw.text(
-        (CARD_W - fw - 60, CARD_H - 60), footer_url, font=footer_font, fill=TEXT_SECONDARY
+        (CARD_W - fw - 48, CARD_H - 48), footer_url, font=footer_font, fill=TEXT_SECONDARY
     )
-
-    # --- Accent corner flourish (gold L-shape) ---
-    flourish_w = 80
-    draw.rectangle((0, 0, flourish_w, 8), fill=ACCENT)
-    draw.rectangle((0, 0, 8, flourish_w), fill=ACCENT)
 
     return img
 

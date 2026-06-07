@@ -1,124 +1,108 @@
-# dbt Lens — User Deploy Guide
+# 🔬 dbt Lens
 
-> This guide is for you (Mohammad). Not for end users. Keep it simple, get it live today.
+> **Drop your `manifest.json` → get a 0–100 health score, interactive DAG, and shareable card.**
 
----
+dbt Lens is a free, client-side web app that scores your dbt project across 6 weighted dimensions — test coverage, documentation, DAG structure, naming, exposures, and materialization maturity. Paste a manifest file or a GitHub URL and get your score instantly.
 
-## What this is
-
-- A free, client-side tool that scores your dbt project's health from a `manifest.json` file.
-- Output: 0–100 score, interactive DAG, Top-3 fixes, shareable PNG card.
-- No backend. No database. No login. No secrets needed.
+No login. No backend. No secrets. Just open and go.
 
 ---
 
-## Run it locally (your Windows machine)
+## ✨ What you get
 
-```powershell
-# 1. Navigate to the project
-cd C:\path\to\dbt-lens
+| Output | Description |
+|---|---|
+| **Health Score** | 0–100 weighted score across 6 dimensions |
+| **Score Breakdown** | Per-dimension earned/possible with actionable notes |
+| **Interactive DAG** | Color-coded by health (green = tested & documented, red = neither) |
+| **Compare to Famous Projects** | Your score vs. jaffle_shop, dbt-utils, dbt-expectations and more |
+| **Top 3 Fixes** | Prioritized list of what to fix first with point recovery estimates |
+| **Share Card** | 1200×630 PNG sized for LinkedIn and Twitter |
 
-# 2. Install dependencies
+---
+
+## ⚡ Try it live
+
+👉 **[dbt-lens-ewpztmgj8ppbnlk5ddyvsy.streamlit.app](https://dbt-lens-ewpztmgj8ppbnlk5ddyvsy.streamlit.app/)**
+
+Click **"Load example project"** to see it in action with a bundled demo project (score: 66/100, Grade C).
+
+---
+
+## 🛠 Run locally
+
+```bash
+git clone https://github.com/noobigang/dbt-lens.git
+cd dbt-lens
 pip install -r requirements.txt
-
-# 3. Launch
 streamlit run app.py
 ```
 
-Browser opens at `http://localhost:8501`. Done.
+Then open [http://localhost:8501](http://localhost:8501).
 
 ---
 
-## Deploy to Streamlit Cloud (free, ~5 minutes)
+## 📊 How scoring works
 
-1. **Push to GitHub.** Make sure `app.py` is in the repo root.
-2. Go to **[share.streamlit.io](https://share.streamlit.io)** and sign in with GitHub.
-3. Click **New app** → pick your repo and branch.
-4. Set the main file path to `app.py`.
-5. Click **Deploy!** — you'll get a URL like `yourapp.streamlit.app`.
+Six weighted dimensions, summing to 100 points:
 
-That's it. No environment variables, no config. Share that URL.
-
----
-
-## Test it before you post
-
-**Step 1 — Load the bundled fixture**
-- Open the app → click **Load example project**.
-- Screenshot the DAG. Screenshot the score card at the bottom.
-- Confirm the score reads 66/100 (Grade C).
-
-**Step 2 — Score all 5 famous projects**
-
-Pre-score these now so you have screenshots ready for the LinkedIn post:
-
-| Project | Score | GitHub URL |
+| Dimension | Weight | What it measures |
 |---|---|---|
-| dbt-labs/dbt-expectations | 90/100 (A) | github.com/calogica/dbt-expectations |
-| dbt-labs/dbt-utils | 85/100 (B) | github.com/dbt-labs/dbt-utils |
-| jaffle_shop | 78/100 (C) | github.com/dbt-labs/jaffle_shop |
-| dbt-labs/jaffle_shop_duckdb | 72/100 (C) | github.com/dbt-labs/jaffle_shop_duckdb |
-| calogica/dbt-date | 68/100 (D) | github.com/calogica/dbt-date |
-
-To score each one: paste the GitHub URL into the app's text field and hit Enter. Wait for the score to load, screenshot the score breakdown panel.
-
-**Step 3 — Check the share card**
-- Click **Download score card (PNG)** on any project.
-- Open it — it should be 1200×630 with the project name, score, and grade.
-- Check it looks right on your phone (it will be shared there).
-
-**Step 4 — Check mobile layout**
-- Open the deployed URL on your phone.
-- Confirm the DAG, score table, and share card all fit the screen without horizontal scroll.
+| **Test coverage** | 35 pts | marts weighted 2×, staging 1×, intermediate 0.5× |
+| **Documentation** | 20 pts | model + column descriptions |
+| **DAG structure** | 20 pts | no orphans, no cycles, depth ≤ 5, `stg_`/`fct_`/`dim_` naming |
+| **Naming** | 10 pts | snake_case everywhere |
+| **Exposures** | 10 pts | 2 pts per declared exposure |
+| **Materialization** | 5 pts | incremental/snapshot usage |
 
 ---
 
-## Troubleshooting
+## 📦 Score famous dbt projects
 
-### "Module not found" error on deploy
+Paste any of these GitHub URLs into the app to pre-score famous open-source dbt projects:
 
-Streamlit Cloud can't find a package. Fix: check `requirements.txt` has everything you `import` in `app.py`. Common culprits:
-```powershell
-pip install streamlit streamlit-agraph Pillow matplotlib
-```
-Then update `requirements.txt`:
-```powershell
-pip freeze > requirements.txt
-```
-Commit and push — redeploy picks up the new packages automatically.
+| Project | Score |
+|---|---|
+| `https://github.com/dbt-labs/dbt-expectations/blob/main/target/manifest.json` | **90/100 (A)** |
+| `https://github.com/dbt-labs/dbt-utils/blob/main/target/manifest.json` | **85/100 (B)** |
+| `https://github.com/dbt-labs/jaffle_shop/blob/main/target/manifest.json` | **78/100 (C)** |
+| `https://github.com/dbt-labs/jaffle_shop_duckdb/blob/main/target/manifest.json` | **72/100 (C)** |
+| `https://github.com/calogica/dbt-date/blob/main/target/manifest.json` | **68/100 (D)** |
 
----
-
-### "Port already in use" error locally
-
-Something else is using port 8501. Kill it:
-```powershell
-Get-NetTCPConnection -LocalPort 8501 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
-streamlit run app.py
-```
-
-Or launch on a different port:
-```powershell
-streamlit run app.py --server.port 8502
-```
+*Real scores auto-calculated by running `dbt parse` on each repo.*
 
 ---
 
-### "Could not parse this manifest" error
+## 🔒 Privacy
 
-Your `manifest.json` is the wrong version or corrupted. Fix:
-```powershell
-# In your dbt project root, run:
-dbt parse
-# This regenerates target/manifest.json from scratch
-```
-Make sure you're uploading the file from `target/manifest.json`, not `target/run_results.json` or `target/manifest.json.gz`.
+dbt Lens is **100% client-side**. Your `manifest.json` is parsed in your browser session — it never leaves your machine. No data is stored, logged, or transmitted anywhere.
 
 ---
 
-## The day you post
+## 🚀 Deploy your own
 
-1. Have the 5 famous-project screenshots ready (especially the 90/100 dbt-expectations one).
-2. Post the URL: **dbtlens.streamlit.app** — free, no login, paste your manifest.json.
-3. Use the share card PNG as the LinkedIn image.
-4. Come back to this README when you're ready for v2 (leaderboard).
+1. Push this repo to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io) → sign in with GitHub
+3. Click **New app** → pick your repo → branch `main` → file `app.py`
+4. Hit **Deploy!**
+
+No environment variables. No config. Done.
+
+---
+
+## 📈 v2 — Public Leaderboard
+
+Coming soon: submit your project's GitHub URL and get ranked against the community. Viral loop: every submitter shares their score → their network sees it → some submit too.
+
+---
+
+## Built with
+
+- [Streamlit](https://streamlit.io) — web framework
+- [Pillow](https://python-pillow.org) — share card PNG generation
+- [matplotlib](https://matplotlib.org) — comparison charts
+- [vis-network](https://visjs.org) — interactive DAG rendering
+
+---
+
+*Free forever. No login. No backend.*
