@@ -549,11 +549,10 @@ def main() -> None:
 
     # === The "wow moment" — DAG first, then the score.
     st.header("🕸  Project DAG")
-st.markdown(
+    st.markdown(
         "<span style='font-size:0.82rem; color:#64748b; display:block; max-width:900px; line-height:1.5;'>"
         "Your project's <b>DAG</b> — a map of how every model connects from sources (left) "
-        "to final business tables (right). Drag to rearrange, <b>+</b>/<b>-</b> to zoom. "
-        "Node color = health status."
+        "to final business tables (right). Node color = health status."
         "</span>",
         unsafe_allow_html=True,
     )
