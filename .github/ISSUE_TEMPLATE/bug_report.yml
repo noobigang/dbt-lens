@@ -1,0 +1,82 @@
+name: Bug Report
+
+description: Create a report to help us improve
+title: "[Bug] "
+labels: [bug]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐛 Bug Description
+
+        A clear and concise description of what the bug is.
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to reproduce"
+      description: "What were you doing when the bug happened?"
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Upload 'manifest.json'
+        4. See error
+
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected behavior"
+      description: "What should have happened instead?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "Actual behavior"
+      description: "What actually happened?"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: "Operating System"
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: "Python version"
+      placeholder: "e.g. 3.11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: manifest
+    attributes:
+      label: "manifest.json (optional)"
+      description: "If the bug is related to parsing, paste the error or first few lines of your manifest.json"
+      placeholder: "(optional) paste error message or manifest snippet here"
+
+  - type: checkboxes
+    id: severity
+    attributes:
+      label: "Severity"
+      options:
+        - label: "Critical — app crashes completely"
+          value: critical
+        - label: "Major — score is clearly wrong"
+          value: major
+        - label: "Minor — UI glitch or cosmetic issue"
+          value: minor

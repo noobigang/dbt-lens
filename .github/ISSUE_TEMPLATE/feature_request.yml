@@ -1,0 +1,51 @@
+name: Feature Request
+
+description: Suggest an idea for this project
+title: "[Feature] "
+labels: [enhancement]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 💡 Feature Request
+
+        A clear description of the feature you'd like to see.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem it solves"
+      description: "What problem does this solve? Who benefits?"
+      placeholder: "As a [data engineer / dbt user], I want to [do X] so that [benefit Y]."
+
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: "Proposed solution"
+      description: "How should it work? Any rough ideas on the UI or implementation?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives considered"
+      description: "Any other tools or approaches you've looked at?"
+      placeholder: "I've looked at X and Y but they don't do Z..."
+
+  - type: checkboxes
+    id: priority
+    attributes:
+      label: "Priority"
+      options:
+        - label: "Must-have — can't use the tool without this"
+          value: must
+        - label: "Should-have — significant improvement"
+          value: should
+        - label: "Nice-to-have — polish item"
+          value: nice
