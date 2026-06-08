@@ -315,6 +315,21 @@ def _render_dimension_breakdown(score: scorer.HealthScore) -> None:
             }
         )
     df = pd.DataFrame(rows)
+
+    st.markdown("""
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px 20px; margin-bottom:16px;">
+        <div style="font-size:0.9rem; font-weight:700; color:#0f172a; margin-bottom:8px;">📐 What do these dimensions mean?</div>
+        <div style="font-size:0.82rem; color:#475569; line-height:1.6;">
+            <b>Test Coverage (35 pts)</b> — Every model needs tests. Schema tests (not_null, unique, relationships) catch bad data at write time. Data tests catch logic errors. Models with <b>0 tests</b> silently produce bad data in production.<br>
+            <b>Documentation (20 pts)</b> — Every model and column needs a description. A model without a description is a time bomb for the next person who touches it.<br>
+            <b>DAG Structure (20 pts)</b> — Checks for orphan models (no parents or children), cycles (A→B→A), and overly deep lineages (10+ steps). Rewards proper naming (stg_/fct_/dim_).<br>
+            <b>Naming (10 pts)</b> — All model names should be snake_case. Mixed naming = multiple authors with no agreed standard.<br>
+            <b>Exposures (10 pts)</b> — Exposures declare which models feed into dashboards (Looker, Tableau, Metabase). Zero exposures means your project is a black box to the business.<br>
+            <b>Materialization (5 pts)</b> — Incremental models run faster in production. If your fact tables rebuild from scratch every run, you're wasting compute.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.subheader("Score breakdown")
     st.dataframe(
         df,
@@ -344,6 +359,13 @@ def _render_comparison(user_score: int, user_label: str) -> None:
     st.markdown(
         f'<div class="comp-header"><span class="comp-title">📊 Compare to famous dbt projects</span>'
         f'<span class="comp-rank">Your project: #{rank} of {len(rows)}</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<span style='font-size:0.82rem; color:#64748b;'>"
+        "Your project is <b>gold</b> · Famous repos are <b>gray</b> · "
+        "Higher bar = healthier project · Use this to set a realistic benchmark, not a perfection target."
+        "</span>",
         unsafe_allow_html=True,
     )
 
@@ -393,6 +415,14 @@ def _render_comparison(user_score: int, user_label: str) -> None:
 def _render_fixes(score: scorer.HealthScore) -> None:
     """Render the 'Top 3 fixes' list."""
     st.subheader("🛠 Top fixes")
+    st.markdown(
+        "<span style='font-size:0.82rem; color:#64748b;'>"
+        "These are the highest-impact changes you can make to improve your score. "
+        "Each fix shows how many points you recover and which dimension it belongs to. "
+        "Start with #1 — it's the biggest lever."
+        "</span>",
+        unsafe_allow_html=True,
+    )
     if not score.fixes:
         st.success("No major gaps detected — your project is in good shape.")
         return
@@ -468,9 +498,27 @@ def main() -> None:
 
     # === The "wow moment" — DAG first, then the score.
     st.header("🕸  Project DAG")
-    st.caption(
-        "Green = tested & documented · Yellow = tests only · "
-        "Orange = docs only · Red = neither · Blue = source · Purple = exposure"
+    st.markdown(
+        "<span style='font-size:0.82rem; color:#64748b;'>"
+        "This is your project's <b>Directed Acyclic Graph (DAG)</b> — "
+        "a map of how every model connects from raw sources (left) to final business tables (right). "
+        "Use <b>+</b> / <b>-</b> to zoom, or drag nodes to rearrange. "
+        "The color of each node tells you its health status at a glance."
+        "</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:4px; font-size:0.78rem; color:#475569;">
+            <span><span style="background:#16a34a; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Tested & documented</span>
+            <span><span style="background:#eab308; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Tests only</span>
+            <span><span style="background:#ea580c; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Docs only</span>
+            <span><span style="background:#dc2626; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Neither</span>
+            <span><span style="background:#2563eb; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Source</span>
+            <span><span style="background:#9333ea; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Exposure</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
     dag_renderer.render_dag(snapshot)
 
