@@ -492,7 +492,7 @@ def _render_share_card(score: scorer.HealthScore) -> None:
     )
     img = card_generator.generate_card(
         project_name=score.project_name,
-        score=score.total_score,
+        score=score.total,
         grade=score.grade,
     )
     st.image(img, caption="1200×630 — ready for LinkedIn and Twitter.", width=600)
