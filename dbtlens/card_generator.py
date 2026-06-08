@@ -154,11 +154,11 @@ def generate_card(
     footer_url: str = "dbt-lens.streamlit.app",
     grade: str | None = None,
 ) -> Image.Image:
-    """Render the 1200x630 share card for a project.
+    """Render the 1200x630 share card.
 
-    This is a TOOL PROMO card — not a personal score card.
-    The viral loop is "I built this / here's a useful tool", not "here's my grade".
-    Nobody posts their internal code health score on LinkedIn.
+    This is a PRODUCT DEMO card — it shows both the tool AND an example
+    score so people can see what the output looks like. The viral hook
+    is "I built this / here's a useful tool" not "here's my grade".
     """
     img = _gradient_bg(CARD_W, CARD_H)
     draw = ImageDraw.Draw(img)
@@ -166,149 +166,163 @@ def generate_card(
     # ── Accent stripe on left edge ─────────────────────────────────────
     draw.rectangle((0, 0, 10, CARD_H), fill=ACCENT)
 
-    # ── TOP SECTION — Brand + Headline ─────────────────────────────────
+    # ── TOP LEFT — Brand + tagline ──────────────────────────────────────
 
     brand_font = _load_font(_FONT_CANDIDATES_BOLD, 34)
     draw.text((46, 44), "dbt Lens", font=brand_font, fill=ACCENT)
 
     tagline_font = _load_font(_FONT_CANDIDATES_REG, 20)
-    draw.text((46, 92), "Free dbt project health auditor", font=tagline_font, fill=TEXT_SECONDARY)
+    draw.text((46, 90), "Free dbt project health auditor", font=tagline_font, fill=TEXT_SECONDARY)
+
+    # ── LEFT — Example score preview ───────────────────────────────────
 
     # Thin divider
-    draw.rectangle((46, 132, CARD_W - 46, 133), fill=(51, 65, 85))
+    draw.rectangle((46, 130, 580, 131), fill=(51, 65, 85))
 
-    # ── MAIN COPY — What it does ─────────────────────────────────────────
+    # "Example output" label
+    label_font = _load_font(_FONT_CANDIDATES_BOLD, 14)
+    draw.text((46, 142), "EXAMPLE OUTPUT", font=label_font, fill=TEXT_SECONDARY)
 
-    headline_font = _load_font(_FONT_CANDIDATES_BOLD, 52)
-    draw.text((46, 155),
-              "Drop your manifest.json.",
-              font=headline_font, fill=TEXT_PRIMARY)
+    # Big score
+    big_score_font = _load_font(_FONT_CANDIDATES_BOLD, 120)
+    score_color = _score_color(score)
+    draw.text((46, 165), str(score), font=big_score_font, fill=score_color)
 
-    sub_font = _load_font(_FONT_CANDIDATES_REG, 30)
-    draw.text((46, 222),
-              "Get a 0-100 health score, interactive DAG,",
-              font=sub_font, fill=TEXT_SECONDARY)
-    draw.text((46, 262),
-              "and know exactly what to fix next.",
-              font=sub_font, fill=TEXT_SECONDARY)
+    # "/100"
+    slash_font = _load_font(_FONT_CANDIDATES_REG, 40)
+    bbox = draw.textbbox((0, 0), str(score), font=big_score_font)
+    sw = bbox[2] - bbox[0]
+    draw.text((46 + sw + 14, 225), "/100", font=slash_font, fill=TEXT_SECONDARY)
 
-    # ── FEATURE BULLETS — 3 reasons to use it ─────────────────────────
+    # Grade circle
+    if grade:
+        grade_font = _load_font(_FONT_CANDIDATES_BOLD, 80)
+        badge_r = 40
+        badge_cx = 46 + sw + 100
+        badge_cy = 220
+        draw.ellipse(
+            [badge_cx - badge_r, badge_cy - badge_r,
+             badge_cx + badge_r, badge_cy + badge_r],
+            fill=ACCENT,
+        )
+        tb_g = draw.textbbox((0, 0), grade, font=grade_font)
+        gw = tb_g[2] - tb_g[0]
+        gh = tb_g[3] - tb_g[1]
+        draw.text(
+            (badge_cx - gw // 2 - tb_g[0], badge_cy - gh // 2 - tb_g[1]),
+            grade, font=grade_font, fill=(15, 23, 42)
+        )
 
-    bullet_font = _load_font(_FONT_CANDIDATES_REG, 22)
-    bullet_bold = _load_font(_FONT_CANDIDATES_BOLD, 22)
-    bullet_y = 330
-    bullets = [
-        ("6 dimensions scored", "test coverage, docs, DAG, naming, exposures, materialization"),
-        ("Interactive DAG", "color-coded by health — zoom, drag, explore"),
-        ("Top 3 fixes", "copy-paste code snippets to improve your score"),
+    # Verdict below score
+    verdict = _verdict_for(score)
+    verdict_font = _load_font(_FONT_CANDIDATES_REG, 20)
+    draw.text((46, 320), verdict, font=verdict_font, fill=TEXT_SECONDARY)
+
+    # "6 dimensions" stat row below verdict
+    dim_font = _load_font(_FONT_CANDIDATES_BOLD, 18)
+    dim_label = _load_font(_FONT_CANDIDATES_REG, 16)
+    dim_items = [
+        ("6", "dimensions"),
+        ("0", "login"),
+        ("100%", "client-side"),
     ]
-    for label, detail in bullets:
-        # Checkmark icon (simple circle with check shape)
-        bx, by = 46, bullet_y
-        draw.ellipse([bx, by, bx + 26, by + 26], fill=ACCENT)
-        # Draw a simple checkmark in the circle
-        check_font = _load_font(_FONT_CANDIDATES_BOLD, 16)
-        draw.text((bx + 5, by + 3), "✓", font=check_font, fill=(15, 23, 42))
+    dx = 46
+    for val, lbl in dim_items:
+        draw.text((dx, 360), val, font=dim_font, fill=ACCENT)
+        tb_d = draw.textbbox((0, 0), val, font=dim_font)
+        vw2 = tb_d[2] - tb_d[0]
+        draw.text((dx + vw2 + 4, 362), lbl, font=dim_label, fill=TEXT_SECONDARY)
+        dx += 130
 
-        lb = draw.textbbox((0, 0), label, font=bullet_bold)
-        lw = lb[2] - lb[0]
-        draw.text((bx + 36, bullet_y), label, font=bullet_bold, fill=TEXT_PRIMARY)
+    # ── CTA at bottom left ─────────────────────────────────────────────
 
-        detail_font = _load_font(_FONT_CANDIDATES_REG, 22)
-        draw.text((bx + 36 + lw + 12, bullet_y), detail, font=detail_font, fill=TEXT_SECONDARY)
-        bullet_y += 46
-
-    # ── CTA BADGE — prominent bottom-left ───────────────────────────────
-
-    cta_x, cta_y = 46, CARD_H - 110
-    cta_font = _load_font(_FONT_CANDIDATES_BOLD, 24)
-    draw.rounded_rectangle([cta_x, cta_y, cta_x + 380, cta_y + 62],
+    cta_x, cta_y = 46, CARD_H - 100
+    cta_font = _load_font(_FONT_CANDIDATES_BOLD, 22)
+    draw.rounded_rectangle([cta_x, cta_y, cta_x + 350, cta_y + 58],
                             radius=12, fill=ACCENT)
-    cta_tb = draw.textbbox((0, 0), "Scan your project for free", font=cta_font)
-    cta_tw = cta_tb[2] - cta_tb[0]
-    draw.text((cta_x + 190 - cta_tw // 2 - cta_tb[0], cta_y + 16),
-              "Scan your project for free", font=cta_font, fill=(15, 23, 42))
+    tb_cta = draw.textbbox((0, 0), "Scan your project free", font=cta_font)
+    ctw = tb_cta[2] - tb_cta[0]
+    draw.text((cta_x + 175 - ctw // 2 - tb_cta[0], cta_y + 14),
+              "Scan your project free", font=cta_font, fill=(15, 23, 42))
 
-    # ── RIGHT PANEL — Product visual / social proof ─────────────────────
+    # ── RIGHT PANEL — What it does ─────────────────────────────────────
 
-    panel_x = 660
+    panel_x = 600
 
-    # Panel background
     draw.rounded_rectangle(
         (panel_x, 100, CARD_W - 30, CARD_H - 30),
         radius=18, fill=(30, 41, 59)
     )
 
-    # "Open-source" badge
-    badge_font = _load_font(_FONT_CANDIDATES_BOLD, 16)
-    draw.rounded_rectangle([panel_x + 36, 130, panel_x + 180, 162],
-                            radius=8, fill=(34, 197, 94, 40))
-    draw.text((panel_x + 54, 133), "OPEN SOURCE", font=badge_font, fill=(34, 197, 94))
+    # Panel header
+    panel_head_font = _load_font(_FONT_CANDIDATES_BOLD, 22)
+    draw.text((panel_x + 36, 124), "What you get", font=panel_head_font, fill=TEXT_PRIMARY)
 
-    # "MIT License"
-    draw.rounded_rectangle([panel_x + 196, 130, panel_x + 320, 162],
-                            radius=8, fill=(212, 175, 55, 40))
-    draw.text((panel_x + 214, 133), "MIT LICENSE", font=badge_font, fill=ACCENT)
-
-    # "No login" badge
-    draw.rounded_rectangle([panel_x + 36, 172, panel_x + 160, 204],
-                            radius=8, fill=(59, 130, 246, 40))
-    draw.text((panel_x + 54, 175), "NO LOGIN", font=badge_font, fill=(59, 130, 246))
-
-    # "Client-side" badge
-    draw.rounded_rectangle([panel_x + 176, 172, panel_x + 320, 204],
-                            radius=8, fill=(168, 85, 247, 40))
-    draw.text((panel_x + 194, 175), "CLIENT-SIDE", font=badge_font, fill=(168, 85, 247))
-
-    # Stats row — social proof numbers
-    stats_y = 250
-    stats = [
-        ("6", "dimensions"),
-        ("0", "login required"),
-        ("100%", "client-side"),
+    # Feature list with icons
+    features = [
+        ("0-100 health score", "across 6 weighted dimensions"),
+        ("Interactive DAG", "color-coded by health status"),
+        ("Top 3 fixes", "with copy-paste YAML/SQL code"),
+        ("Score breakdown", "per dimension with notes"),
     ]
-    stat_w = (CARD_W - panel_x - 72) // 3
-    stat_val_font = _load_font(_FONT_CANDIDATES_BOLD, 42)
-    stat_label_font = _load_font(_FONT_CANDIDATES_REG, 15)
-    for i, (val, label) in enumerate(stats):
-        sx = panel_x + 36 + i * (stat_w + 12)
-        draw.rounded_rectangle([sx, stats_y, sx + stat_w, stats_y + 90],
-                                radius=10, fill=(51, 65, 85))
-        tb = draw.textbbox((0, 0), val, font=stat_val_font)
-        vw = tb[2] - tb[0]
-        draw.text((sx + stat_w // 2 - vw // 2 - tb[0], stats_y + 12),
-                  val, font=stat_val_font, fill=ACCENT)
-        tb2 = draw.textbbox((0, 0), label, font=stat_label_font)
-        lw2 = tb2[2] - tb2[0]
-        draw.text((sx + stat_w // 2 - lw2 // 2 - tb2[0], stats_y + 62),
-                  label, font=stat_label_font, fill=TEXT_SECONDARY)
+    feat_y = 175
+    feat_bold = _load_font(_FONT_CANDIDATES_BOLD, 18)
+    feat_reg = _load_font(_FONT_CANDIDATES_REG, 18)
+    for label, detail in features:
+        # Check circle
+        draw.ellipse([panel_x + 36, feat_y, panel_x + 58, feat_y + 22], fill=ACCENT)
+        check_f = _load_font(_FONT_CANDIDATES_BOLD, 13)
+        draw.text((panel_x + 44, feat_y + 1), "✓", font=check_f, fill=(15, 23, 42))
+        draw.text((panel_x + 70, feat_y), label, font=feat_bold, fill=TEXT_PRIMARY)
+        tb_f = draw.textbbox((0, 0), label, font=feat_bold)
+        fw = tb_f[2] - tb_f[0]
+        draw.text((panel_x + 70 + fw + 8, feat_y), detail, font=feat_reg, fill=TEXT_SECONDARY)
+        feat_y += 44
 
-    # CTA button — "Try dbt Lens"
-    cta2_y = stats_y + 120
-    cta2_font = _load_font(_FONT_CANDIDATES_BOLD, 24)
+    # "6 dimensions" in panel
+    draw.rectangle((panel_x + 36, feat_y + 8, CARD_W - 66, feat_y + 9), fill=(51, 65, 85))
+    dim_heading = _load_font(_FONT_CANDIDATES_BOLD, 15)
+    draw.text((panel_x + 36, feat_y + 22), "6 SCORED DIMENSIONS", font=dim_heading, fill=TEXT_SECONDARY)
+
+    dims = [
+        ("Test Coverage", "35 pts"),
+        ("Documentation", "20 pts"),
+        ("DAG Structure", "20 pts"),
+        ("Naming", "10 pts"),
+        ("Exposures", "10 pts"),
+        ("Materialization", "5 pts"),
+    ]
+    col_w = (CARD_W - panel_x - 72) // 3
+    for i, (d_name, d_pts) in enumerate(dims):
+        cx = panel_x + 36 + (i % 3) * (col_w + 8)
+        cy = feat_y + 50 + (i // 3) * 40
+        draw.rounded_rectangle([cx, cy, cx + col_w, cy + 32],
+                                radius=6, fill=(51, 65, 85))
+        d_font = _load_font(_FONT_CANDIDATES_REG, 14)
+        draw.text((cx + 8, cy + 7), d_name, font=d_font, fill=TEXT_PRIMARY)
+        tb_d = draw.textbbox((0, 0), d_name, font=d_font)
+        dw = tb_d[2] - tb_d[0]
+        draw.text((cx + col_w - 8 - (len(d_pts) * 9), cy + 7), d_pts,
+                  font=d_font, fill=ACCENT)
+
+    # CTA button at bottom of panel
+    cta2_y = CARD_H - 100
+    cta2_font = _load_font(_FONT_CANDIDATES_BOLD, 22)
     draw.rounded_rectangle(
-        [panel_x + 36, cta2_y, panel_x + 36 + 460, cta2_y + 60],
+        [panel_x + 36, cta2_y, panel_x + 36 + 460, cta2_y + 58],
         radius=12, fill=ACCENT
     )
-    tb2 = draw.textbbox((0, 0), "Try dbt Lens — it's free", font=cta2_font)
+    tb2 = draw.textbbox((0, 0), "Try it — dbt-lens.streamlit.app", font=cta2_font)
     tb2w = tb2[2] - tb2[0]
-    draw.text((panel_x + 36 + 230 - tb2w // 2 - tb2[0], cta2_y + 16),
-              "Try dbt Lens — it's free", font=cta2_font, fill=(15, 23, 42))
+    draw.text((panel_x + 36 + 230 - tb2w // 2 - tb2[0], cta2_y + 14),
+              "Try it — dbt-lens.streamlit.app", font=cta2_font, fill=(15, 23, 42))
 
-    # URL below CTA
-    url_font = _load_font(_FONT_CANDIDATES_REG, 17)
-    url_text = "dbt-lens.streamlit.app"
-    tb_u = draw.textbbox((0, 0), url_text, font=url_font)
-    uw = tb_u[2] - tb_u[0]
-    draw.text((panel_x + 36 + 230 - uw // 2 - tb_u[0], cta2_y + 72),
-              url_text, font=url_font, fill=TEXT_SECONDARY)
-
-    # ── Footer (bottom right) ───────────────────────────────────────────
-    footer_font = _load_font(_FONT_CANDIDATES_REG, 17)
+    # ── Footer ─────────────────────────────────────────────────────────
+    footer_font = _load_font(_FONT_CANDIDATES_REG, 16)
     footer_text = "github.com/noobigang/dbt-lens"
     tb_f = draw.textbbox((0, 0), footer_text, font=footer_font)
     fw = tb_f[2] - tb_f[0]
-    draw.text((CARD_W - fw - 40, CARD_H - 45), footer_text,
+    draw.text((CARD_W - fw - 40, CARD_H - 42), footer_text,
               font=footer_font, fill=TEXT_SECONDARY)
 
     return img
