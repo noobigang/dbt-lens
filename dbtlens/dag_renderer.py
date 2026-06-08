@@ -272,14 +272,15 @@ _VIS_HTML = r"""
     background: rgba(255,255,255,0.02);
   }
   .legend {
-    position: absolute; top: 72px; right: 32px;
+    position: absolute; top: 72px; right: 20px;
     background: rgba(15,23,42,0.92);
     backdrop-filter: blur(12px);
-    padding: 16px 18px; border-radius: 12px;
+    padding: 16px 20px; border-radius: 12px;
     font-size: 12px;
     border: 1px solid rgba(255,255,255,0.1);
     box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-    min-width: 180px;
+    min-width: 220px;
+    max-width: 240px;
   }
   .legend-title {
     color: #94a3b8;
@@ -325,6 +326,9 @@ _VIS_HTML = r"""
     padding: 8px 14px; border-radius: 20px;
     backdrop-filter: blur(8px);
   }
+  /* Kill vis-network's built-in nav buttons — we use our own controls */
+  .vis-navigation { display: none !important; }
+  .vis-zoom-actions { display: none !important; }
 </style>
 </head>
 <body>

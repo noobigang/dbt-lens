@@ -173,108 +173,119 @@ def generate_card(
     img = _gradient_bg(CARD_W, CARD_H)
     draw = ImageDraw.Draw(img)
 
-    # --- Accent stripe on left edge ---
-    draw.rectangle((0, 0, 6, CARD_H), fill=ACCENT)
+    # ── Accent stripe on left edge ─────────────────────────────────────
+    draw.rectangle((0, 0, 8, CARD_H), fill=ACCENT)
 
-    # --- Top-left brand mark ---
-    brand_font = _load_font(_FONT_CANDIDATES_BOLD, 26)
-    draw.text((48, 42), "dbt Lens", font=brand_font, fill=ACCENT)
-    sub_brand = _load_font(_FONT_CANDIDATES_REG, 17)
-    draw.text((48, 78), "Health Score", font=sub_brand, fill=TEXT_SECONDARY)
+    # ── LEFT SIDE — Brand + Score + Grade + Project name ────────────────
 
-    # --- Divider line ---
-    draw.rectangle((48, 110, 560, 111), fill=(100, 116, 139))
+    # Brand name at top-left
+    brand_font = _load_font(_FONT_CANDIDATES_BOLD, 28)
+    draw.text((46, 40), "dbt Lens", font=brand_font, fill=ACCENT)
 
-    # --- Big score (center-left) ---
-    big_font = _load_font(_FONT_CANDIDATES_BOLD, 200)
-    score_text = str(score)
-    _draw_text_centered(draw, score_text, big_font, (300, 340), _score_color(score))
+    # Big score number — large, readable, left-aligned
+    big_font = _load_font(_FONT_CANDIDATES_BOLD, 180)
+    score_color = _score_color(score)
+    # Draw score at a fixed left position so it's readable
+    draw.text((46, 150), str(score), font=big_font, fill=score_color)
 
-    # --- "/100" denominator ---
-    slash_font = _load_font(_FONT_CANDIDATES_REG, 52)
-    bbox = draw.textbbox((0, 0), score_text, font=big_font)
+    # "/100" beside the score
+    slash_font = _load_font(_FONT_CANDIDATES_REG, 56)
+    bbox = draw.textbbox((0, 0), str(score), font=big_font)
     score_w = bbox[2] - bbox[0]
-    _draw_text_left(draw, "/100", slash_font, 300 + score_w // 2 + 30, 340, TEXT_SECONDARY)
+    draw.text((46 + score_w + 16, 240), "/100", font=slash_font, fill=TEXT_SECONDARY)
 
-    # --- Grade badge ---
+    # Grade badge — to the right of the score
     if grade:
-        grade_font = _load_font(_FONT_CANDIDATES_BOLD, 110)
-        _draw_text_centered(
-            draw, grade, grade_font, (300 + score_w // 2 + 280, 340), ACCENT
+        grade_font = _load_font(_FONT_CANDIDATES_BOLD, 120)
+        # Position grade to the right of the score number
+        grade_x = 46 + score_w + 120
+        # Draw grade in a circle-ish badge
+        badge_r = 55
+        badge_cx = grade_x + 60
+        badge_cy = 290
+        draw.ellipse(
+            [badge_cx - badge_r, badge_cy - badge_r,
+             badge_cx + badge_r, badge_cy + badge_r],
+            fill=ACCENT,
+        )
+        # Draw grade letter centered
+        bbox_g = draw.textbbox((0, 0), grade, font=grade_font)
+        gw = bbox_g[2] - bbox_g[0]
+        gh = bbox_g[3] - bbox_g[1]
+        draw.text(
+            (badge_cx - gw // 2 - bbox_g[0], badge_cy - gh // 2 - bbox_g[1]),
+            grade, font=grade_font, fill=(15, 23, 42)
         )
 
-    # --- Project name ---
-    name_font = _load_font(_FONT_CANDIDATES_BOLD, 42)
-    _draw_text_centered(draw, name, name_font, (300, 490), TEXT_PRIMARY)
+    # Project name below score
+    name_font = _load_font(_FONT_CANDIDATES_BOLD, 38)
+    draw.text((46, 420), name, font=name_font, fill=TEXT_PRIMARY)
 
-    # --- Verdict tagline ---
+    # Verdict below project name
     verdict = _verdict_for(score)
-    verdict_font = _load_font(_FONT_CANDIDATES_LIGHT, 21)
-    _draw_text_centered(draw, verdict, verdict_font, (300, 545), TEXT_SECONDARY)
+    verdict_font = _load_font(_FONT_CANDIDATES_REG, 22)
+    draw.text((46, 472), verdict, font=verdict_font, fill=TEXT_SECONDARY)
 
-    # --- Right panel: score band + scan badge ---
+    # ── RIGHT SIDE — Progress bar + Scan badge ─────────────────────────
+
     panel_x = 660
     # Panel background
     draw.rounded_rectangle(
-        (panel_x, 120, panel_x + 500, CARD_H - 50),
-        radius=16,
+        (panel_x, 100, CARD_W - 30, CARD_H - 30),
+        radius=18,
         fill=(30, 41, 59),
     )
 
-    # Score band section
-    bar_x0, bar_y0 = panel_x + 40, 170
-    bar_w, bar_h = 400, 28
+    # "YOUR SCORE" label
+    label_font = _load_font(_FONT_CANDIDATES_BOLD, 16)
+    draw.text((panel_x + 36, 130), "YOUR SCORE", font=label_font, fill=TEXT_SECONDARY)
 
-    band_label_font = _load_font(_FONT_CANDIDATES_BOLD, 17)
-    draw.text((bar_x0, bar_y0 - 30), "SCORE", font=band_label_font, fill=TEXT_SECONDARY)
+    # Progress bar track
+    bar_x0, bar_y0 = panel_x + 36, 170
+    bar_w, bar_h = CARD_W - panel_x - 72, 32
 
-    # track
     draw.rounded_rectangle(
-        (bar_x0, bar_y0, bar_x0 + bar_w, bar_y0 + bar_h), radius=14, fill=(51, 65, 85)
+        (bar_x0, bar_y0, bar_x0 + bar_w, bar_y0 + bar_h),
+        radius=16, fill=(51, 65, 85)
     )
-    fill_w = max(4, int(bar_w * (score / 100.0)))
+    fill_w = max(8, int(bar_w * (score / 100.0)))
     draw.rounded_rectangle(
         (bar_x0, bar_y0, bar_x0 + fill_w, bar_y0 + bar_h),
-        radius=14,
-        fill=_score_color(score),
+        radius=16, fill=score_color
     )
-    # tick labels
-    tick_font = _load_font(_FONT_CANDIDATES_REG, 15)
+
+    # Tick labels below bar
+    tick_font = _load_font(_FONT_CANDIDATES_REG, 14)
     for tick in (0, 25, 50, 75, 100):
         tx = bar_x0 + int(bar_w * (tick / 100.0))
-        draw.text((tx - 5, bar_y0 + bar_h + 6), str(tick), font=tick_font, fill=TEXT_SECONDARY)
+        lbl = str(tick)
+        tb = draw.textbbox((0, 0), lbl, font=tick_font)
+        lw = tb[2] - tb[0]
+        draw.text((tx - lw // 2 - tb[0], bar_y0 + bar_h + 8), lbl,
+                  font=tick_font, fill=TEXT_SECONDARY)
 
-    # Grade + verdict in panel
-    if grade:
-        grade_big_font = _load_font(_FONT_CANDIDATES_BOLD, 80)
-        _draw_text_centered(draw, grade, grade_big_font, (panel_x + 250, 330), ACCENT)
-        grade_label_font = _load_font(_FONT_CANDIDATES_REG, 16)
-        draw.text((panel_x + 40, 390), "GRADE", font=grade_label_font, fill=TEXT_SECONDARY)
+    # Grade — only show on left (it's the hero). Skip duplicate on right.
+    # Right panel focuses on the score bar and call to action.
 
-    verdict_panel_font = _load_font(_FONT_CANDIDATES_LIGHT, 18)
-    _draw_text_centered(draw, verdict, verdict_panel_font, (panel_x + 250, 450), TEXT_SECONDARY)
-
-    # Scan badge
+    # "Open in dbt Lens" CTA badge — bottom of panel
+    cta_y = CARD_H - 90
+    cta_font = _load_font(_FONT_CANDIDATES_BOLD, 22)
     draw.rounded_rectangle(
-        (panel_x + 40, 490, panel_x + 460, 540),
-        radius=10,
-        fill=(212, 175, 55, 30),
+        (panel_x + 36, cta_y, panel_x + 36 + 460, cta_y + 56),
+        radius=12, fill=ACCENT
     )
-    scan_font = _load_font(_FONT_CANDIDATES_BOLD, 16)
-    draw.text(
-        (panel_x + 60, 502),
-        f"🔬  Scanned with dbt Lens",
-        font=scan_font,
-        fill=ACCENT,
-    )
+    # Center text in button
+    tb_cta = draw.textbbox((0, 0), "Open in dbt Lens", font=cta_font)
+    cta_tw = tb_cta[2] - tb_cta[0]
+    draw.text((panel_x + 36 + 230 - cta_tw // 2 - tb_cta[0], cta_y + 14),
+              "Open in dbt Lens", font=cta_font, fill=(15, 23, 42))
 
-    # --- Footer URL (bottom right) ---
+    # ── Footer URL (bottom right corner) ────────────────────────────────
     footer_font = _load_font(_FONT_CANDIDATES_REG, 18)
     bbox = draw.textbbox((0, 0), footer_url, font=footer_font)
     fw = bbox[2] - bbox[0]
-    draw.text(
-        (CARD_W - fw - 48, CARD_H - 48), footer_url, font=footer_font, fill=TEXT_SECONDARY
-    )
+    draw.text((CARD_W - fw - 40, CARD_H - 45), footer_url,
+              font=footer_font, fill=TEXT_SECONDARY)
 
     return img
 
