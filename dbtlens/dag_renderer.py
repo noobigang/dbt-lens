@@ -1,12 +1,7 @@
 """Render an interactive DAG colored by per-model health.
 
-The renderer tries (in order):
-1. ``streamlit-agraph`` — the preferred networkx-of-agraph embedded component
-2. A hand-rolled ``st.components.v1.html`` block using vis-network loaded
-   from a CDN
-
-The output is a self-contained HTML fragment. The Streamlit app calls
-:func:`render_dag` and we choose whichever backend imports cleanly.
+Uses dagre.js for clean hierarchical left-to-right layout,
+rendered as pure SVG via st.components.v1.html.
 """
 
 from __future__ import annotations
@@ -22,48 +17,36 @@ from .parser import ModelNode, ProjectSnapshot
 # Per-model health classification
 # ---------------------------------------------------------------------------
 
-# Health buckets — the colors are also used by the share card
-HEALTHY = "healthy"  # has tests AND docs
-SEMI_DOC = "semi_doc"  # has tests but missing docs
-SEMI_TEST = "semi_test"  # has docs but missing tests
-UNHEALTHY = "unhealthy"  # missing both
-SOURCE = "source"  # source node
-EXPOSURE = "exposure"  # exposure node
-
+HEALTHY = "healthy"
+SEMI_DOC = "semi_doc"
+SEMI_TEST = "semi_test"
+UNHEALTHY = "unhealthy"
+SOURCE = "source"
+EXPOSURE = "exposure"
 
 _HEALTH_COLOR = {
-    HEALTHY: "#22c55e",  # green
-    SEMI_DOC: "#eab308",  # yellow
-    SEMI_TEST: "#f97316",  # orange
-    UNHEALTHY: "#ef4444",  # red
-    SOURCE: "#3b82f6",  # blue
-    EXPOSURE: "#a855f7",  # purple
+    HEALTHY: "#22c55e",
+    SEMI_DOC: "#eab308",
+    SEMI_TEST: "#f97316",
+    UNHEALTHY: "#ef4444",
+    SOURCE: "#3b82f6",
+    EXPOSURE: "#a855f7",
 }
 
 
 @dataclass(frozen=True)
 class DagNode:
-    """A single node in the rendered DAG."""
-
     id: str
     label: str
     color: str
-    title: str  # hover tooltip
+    title: str
     shape: str = "box"
 
 
 @dataclass(frozen=True)
 class DagEdge:
-    """A single edge in the rendered DAG."""
-
     source: str
     target: str
-    arrows: str = "to"
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def _tested_model_ids(snapshot: ProjectSnapshot) -> set[str]:
@@ -83,14 +66,12 @@ def _classify_model(m: ModelNode, tested: set[str]) -> str:
 
 
 def _build_tooltip(m: ModelNode) -> str:
-    """Build a multi-line hover tooltip for a model node."""
     lines: list[str] = [
         f"<b>{m.name}</b>",
         f"layer: {m.layer}",
         f"materialization: {m.materialized}",
     ]
     if m.description:
-        # escape minimal HTML
         esc = m.description.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         lines.append(f"<br/>{esc[:200]}{'...' if len(m.description) > 200 else ''}")
     if m.columns:
@@ -100,20 +81,10 @@ def _build_tooltip(m: ModelNode) -> str:
 
 
 def build_dag(snapshot: ProjectSnapshot) -> tuple[list[DagNode], list[DagEdge]]:
-    """Translate a ProjectSnapshot into nodes/edges ready for the renderer.
-
-    Args:
-        snapshot: A :class:`ProjectSnapshot` from :mod:`parser`.
-
-    Returns:
-        A tuple ``(nodes, edges)``. The renderer is responsible for
-        formatting them for its particular backend.
-    """
     nodes: list[DagNode] = []
     edges: list[DagEdge] = []
     tested = _tested_model_ids(snapshot)
 
-    # -- Models --
     for m in snapshot.models:
         if not m.is_model:
             continue
@@ -129,7 +100,6 @@ def build_dag(snapshot: ProjectSnapshot) -> tuple[list[DagNode], list[DagEdge]]:
         for parent in m.depends_on:
             edges.append(DagEdge(source=parent, target=m.unique_id))
 
-    # -- Sources (light blue squares; no incoming edges) --
     for s in snapshot.sources:
         nodes.append(
             DagNode(
@@ -140,22 +110,17 @@ def build_dag(snapshot: ProjectSnapshot) -> tuple[list[DagNode], list[DagEdge]]:
                 shape="ellipse",
             )
         )
-        # Sources link into the project via tests. We don't model data flow
-        # edges for sources; tests are visible on the models they attach to.
 
-    # -- Exposures (purple diamonds) --
     for e in snapshot.exposures:
         nodes.append(
             DagNode(
                 id=e.unique_id,
-                label=f"📊 {e.name}",
+                label=f"{e.name}",
                 color=_HEALTH_COLOR[EXPOSURE],
                 title=f"<b>{e.name}</b><br/>exposure ({e.type or 'unspecified'})",
                 shape="diamond",
             )
         )
-        # Exposures point at their depends_on nodes (often a mart).
-        # The parser keeps raw manifest; we re-derive here.
         deps = (
             snapshot.raw_manifest.get("exposures", {})
             .get(e.unique_id, {})
@@ -169,79 +134,8 @@ def build_dag(snapshot: ProjectSnapshot) -> tuple[list[DagNode], list[DagEdge]]:
 
 
 # ---------------------------------------------------------------------------
-# streamlit-agraph backend
+# HTML renderer using dagre.js (proven clean DAG layout)
 # ---------------------------------------------------------------------------
-
-
-def render_with_agraph(nodes: list[DagNode], edges: list[DagEdge]) -> Any:
-    """Render via streamlit-agraph. Returns the agraph component instance.
-
-    Imported lazily so the module loads even if agraph is not installed.
-    """
-    from streamlit_agraph import Config, Edge, Node, agraph
-
-    agraph_nodes = [
-        Node(
-            id=n.id,
-            label=n.label,
-            color=n.color,
-            title=n.title,
-            shape=n.shape,
-            size=28,
-            font={"color": "#fff", "size": 13},
-            borderWidth=2,
-        )
-        for n in nodes
-    ]
-    agraph_edges = [
-        Edge(source=e.source, target=e.target, color="#94a3b8", arrows="to")
-        for e in edges
-    ]
-    config = Config(
-        width=1000,
-        height=680,
-        directed=True,
-        physics=True,
-        hierarchical=False,
-        nodeHighlightBehavior=True,
-        collapsible=False,
-        highlightColor="#d4af37",
-        maxZoom=2.5,
-        minZoom=0.3,
-    )
-    return agraph(nodes=agraph_nodes, edges=agraph_edges, config=config)
-
-
-# ---------------------------------------------------------------------------
-# d3-dag renderer — hierarchical (sugiyama) layout, no backward arrows
-# ---------------------------------------------------------------------------
-
-# Health colors (fill, border)
-_HEALTH_FILL = {
-    HEALTHY: "#22c55e",
-    SEMI_DOC: "#eab308",
-    SEMI_TEST: "#f97316",
-    UNHEALTHY: "#ef4444",
-    SOURCE: "#3b82f6",
-    EXPOSURE: "#a855f7",
-}
-_HEALTH_BORDER = {
-    HEALTHY: "#16a34a",
-    SEMI_DOC: "#ca8a04",
-    SEMI_TEST: "#ea580c",
-    UNHEALTHY: "#dc2626",
-    SOURCE: "#2563eb",
-    EXPOSURE: "#9333ea",
-}
-_HEALTH_TEXT = {
-    HEALTHY: "#f0fdf4",
-    SEMI_DOC: "#1c1917",
-    SEMI_TEST: "#fff7ed",
-    UNHEALTHY: "#fef2f2",
-    SOURCE: "#eff6ff",
-    EXPOSURE: "#faf5ff",
-}
-
 
 _DAG_HTML = r"""
 <!doctype html>
@@ -249,7 +143,7 @@ _DAG_HTML = r"""
 <head>
 <meta charset="utf-8">
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/d3-dag@0.11.1/bundle/d3-dag.cjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #0f172a; font-family: 'Inter', -apple-system, sans-serif; }
@@ -264,6 +158,7 @@ _DAG_HTML = r"""
     display: flex;
     flex-direction: column;
     height: 100%;
+    position: relative;
   }
   .dag-header {
     display: flex;
@@ -357,21 +252,20 @@ _DAG_HTML = r"""
     backdrop-filter: blur(8px); z-index: 10;
   }
 
-  /* Node styles */
+  /* SVG node styles */
   .node-group { cursor: pointer; }
-  .node-group:hover .node-box { filter: brightness(1.15); }
-  .node-box { transition: filter 0.15s; }
-  .node-label { font-size: 12px; font-weight: 500; fill: white; pointer-events: none; }
-  .edge-path { fill: none; stroke: rgba(148,163,184,0.45); stroke-width: 1.5px; }
-  .edge-path:hover { stroke: #d4af37; stroke-width: 2px; }
-  .arrowhead { fill: rgba(148,163,184,0.6); }
+  .node-group:hover .node-box { filter: brightness(1.2); }
+  .node-label { font-size: 12px; font-weight: 500; fill: white; pointer-events: none; font-family: 'Inter', sans-serif; }
+  .edge-path { fill: none; stroke: #475569; stroke-width: 1.5px; }
+  .edge-path:hover { stroke: #d4af37; stroke-width: 2.5px; }
+  .arrow-marker { fill: #475569; }
 </style>
 </head>
 <body>
 <div class="dag-wrapper">
   <div class="dag-header">
     <div class="dag-title"><span>🔬</span> dbt Lens — Project DAG</div>
-    <div class="dag-badge">Hierarchical · Sugiyama layout</div>
+    <div class="dag-badge">Dagre Layout · Left-to-Right</div>
   </div>
   <div id="lens-dag-container">
     <svg id="lens-dag"></svg>
@@ -393,177 +287,263 @@ _DAG_HTML = r"""
   </div>
 </div>
 <script type="text/javascript">
+(function() {
   var rawData = __DATA__;
   var nodeMap = {};
   rawData.nodes.forEach(function(n) { nodeMap[n.id] = n; });
 
   var container = document.getElementById('lens-dag-container');
-  var svgEl = document.getElementById('lens-dag');
   var W = container.clientWidth || 900;
-  var H = container.clientHeight || 600;
+  var H = container.clientHeight || 650;
 
-  var svg = d3.select('#lens-dag').attr('width', W).attr('height', H);
+  var svg = d3.select('#lens-dag')
+    .attr('width', W)
+    .attr('height', H);
+
   svg.selectAll('*').remove();
 
-  // Build node list for d3-dag stratify
-  // Each node needs: id, parentIds (empty array for roots)
-  var nodeIds = new Set(rawData.nodes.map(function(n) { return n.id; }));
-  var dagNodes = rawData.nodes.map(function(n) {
-    return { id: n.id };
+  // Arrow marker
+  var defs = svg.append('defs');
+  defs.append('marker')
+    .attr('id', 'arrow')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 6)
+    .attr('refY', 0)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-5L10,0L0,5')
+    .attr('class', 'arrow-marker');
+
+  defs.append('marker')
+    .attr('id', 'arrow-hover')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 6)
+    .attr('refY', 0)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-5L10,0L0,5')
+    .attr('fill', '#d4af37');
+
+  // Build dagre graph
+  var g = new dagre.graphlib.Graph();
+  g.setGraph({
+    rankdir: 'LR',
+    nodesep: 55,
+    ranksep: 100,
+    marginx: 50,
+    marginy: 50,
+    edgesep: 20
+  });
+  g.setDefaultEdgeLabel(function() { return {}; });
+
+  // Add nodes to dagre
+  rawData.nodes.forEach(function(n) {
+    var isSource = n.shape === 'ellipse';
+    var isExposure = n.shape === 'diamond';
+    var w = isSource || isExposure ? 140 : 130;
+    var h = 44;
+    g.setNode(n.id, { width: w, height: h });
   });
 
-  // Build edges as parentIds format
-  var parentMap = {};
+  // Add edges to dagre
   rawData.edges.forEach(function(e) {
-    if (!parentMap[e.target]) parentMap[e.target] = [];
-    parentMap[e.target].push(e.source);
-  });
-
-  // Create dagNodes with parentIds
-  var dagInput = rawData.nodes.map(function(n) {
-    return {
-      id: n.id,
-      parentIds: parentMap[n.id] || []
-    };
-  });
-
-  // Handle nodes with no edges (root orphans) — give them no parentIds
-  dagInput.forEach(function(n) {
-    if (n.parentIds.length === 0 && rawData.edges.length > 0) {
-      // Check if this node appears as a source or target in edges
-      var hasEdge = rawData.edges.some(function(e) {
-        return e.source === n.id || e.target === n.id;
-      });
-      if (!hasEdge && rawData.edges.length > 0) {
-        // Orphan node — keep parentIds empty, it will be a root
-      }
+    if (g.hasNode(e.source) && g.hasNode(e.target)) {
+      g.setEdge(e.source, e.target);
     }
   });
 
-  // Build DAG using d3-dag 0.11.1 CJS bundle
-  // API: d3dag.stratify() and d3dag.sugiyama() (not d3.dagStratify)
-  var stratify = d3dag.stratify();
-  var dag;
-  try {
-    dag = stratify(dagInput);
-  } catch(e) {
-    console.error('d3-dag stratify error:', e);
-    document.getElementById('nodeCount').textContent = 'DAG error: ' + e.message;
-    dag = null;
-  }
+  // Run dagre layout
+  dagre.layout(g);
 
-  if (dag) {
-    // Sugiyama layout — clean hierarchical left-to-right
-    // d3-dag 0.11.1 API: sugiyama().nodeSize([w,h]).layering().decross().coord()
-    var layout = d3dag.sugiyama()
-      .nodeSize(function(n) { return [140, 48]; })
-      .layering(d3dag.layeringSimplex())
-      .decross(d3dag.decrossOpt())
-      .coord(d3dag.coordQuad());
+  // Compute bounding box of all nodes
+  var allNodes = g.nodes();
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  allNodes.forEach(function(nid) {
+    var info = g.node(nid);
+    var x = info.x, y = info.y, w = info.width, h = info.height;
+    minX = Math.min(minX, x - w/2);
+    minY = Math.min(minY, y - h/2);
+    maxX = Math.max(maxX, x + w/2);
+    maxY = Math.max(maxY, y + h/2);
+  });
 
-    layout(dag);
+  var graphW = maxX - minX + 80;
+  var graphH = maxY - minY + 80;
+  var offsetX = 50 - minX;
+  var offsetY = 30 - minY;
 
-    // Zoom behavior
-    var zoom = d3.zoom().scaleExtent([0.25, 2.5]).on('zoom', function(event) {
-      g.attr('transform', event.transform);
+  // Create main group with zoom
+  var zoom = d3.zoom()
+    .scaleExtent([0.2, 2.5])
+    .on('zoom', function(event) {
+      mainGroup.attr('transform', event.transform);
     });
-    svg.call(zoom);
+  svg.call(zoom);
+  svg.on('dblclick.zoom', null);
 
-    var g = svg.append('g').attr('transform', 'translate(50, 20)');
+  var mainGroup = svg.append('g').attr('class', 'main-group');
 
-    // Arrow marker definition
-    svg.append('defs').append('marker')
-      .attr('id', 'arrow')
-      .attr('viewBox', '0 -5 10 10')
-      .attr('refX', 7)
-      .attr('refY', 0)
-      .attr('markerWidth', 6)
-      .attr('markerHeight', 6)
-      .attr('orient', 'auto')
-      .append('path')
-      .attr('d', 'M0,-5L10,0L0,5')
-      .attr('class', 'arrowhead');
-
-    // Draw edges using link points from d3-dag
-    g.append('g').attr('class', 'edges')
-      .selectAll('path')
-      .data(dag.links())
-      .enter()
-      .append('path')
-      .attr('class', 'edge-path')
-      .attr('d', function(link) {
-        var pts = link.points;
-        if (!pts || pts.length < 2) return '';
-        var start = pts[0];
-        var end = pts[pts.length - 1];
-        return 'M' + start.x + ',' + start.y +
-               ' C' + (start.x + 50) + ',' + start.y +
-               ' ' + (end.x - 50) + ',' + end.y +
-               ' ' + end.x + ',' + end.y;
-      })
-      .attr('marker-end', 'url(#arrow)');
-
-    // Draw nodes
-    var allNodes = dag.nodes ? dag.nodes() : dag.descendants();
-
-    var nodeGroups = g.append('g').attr('class', 'nodes')
-      .selectAll('g')
-      .data(allNodes)
-      .enter()
-      .append('g')
-      .attr('class', 'node-group')
-      .attr('transform', function(n) {
-        return 'translate(' + n.x + ',' + n.y + ')';
-      });
-
-    // Node rect
-    nodeGroups.append('rect')
-      .attr('class', 'node-box')
-      .attr('x', -70).attr('y', -24)
-      .attr('width', 140).attr('height', 48)
-      .attr('rx', 10)
-      .attr('fill', function(n) {
-        var nd = nodeMap[n.id] || {};
-        return nd.color || '#64748b';
-      })
-      .attr('stroke', function(n) {
-        var nd = nodeMap[n.id] || {};
-        var c = nd.color || '#64748b';
-        return d3.color(c).darker(0.6);
-      })
-      .attr('stroke-width', 2);
-
-    // Node label
-    nodeGroups.append('text')
-      .attr('class', 'node-label')
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'central')
-      .attr('y', 0)
-      .text(function(n) {
-        var label = (nodeMap[n.id] || {}).label || n.id;
-        return label.length > 16 ? label.substring(0, 14) + '…' : label;
-      });
-
-    // Tooltip
-    nodeGroups.append('title').text(function(n) {
-      var nd = nodeMap[n.id] || {};
-      return nd.title || nd.label || n.id;
-    });
-
-    document.getElementById('nodeCount').textContent =
-      rawData.nodes.length + ' nodes · ' + rawData.edges.length + ' edges';
-  }
-
-  // Zoom controls
+  // Zoom control buttons
   document.getElementById('zoomIn').addEventListener('click', function() {
-    svg.transition().duration(300).call(zoom.scaleBy, 1.3);
+    svg.transition().duration(300).call(zoom.scaleBy, 1.4);
   });
   document.getElementById('zoomOut').addEventListener('click', function() {
-    svg.transition().duration(300).call(zoom.scaleBy, 0.75);
+    svg.transition().duration(300).call(zoom.scaleBy, 0.7);
   });
   document.getElementById('zoomFit').addEventListener('click', function() {
     svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
   });
+
+  // Draw edges
+  var edgeGroup = mainGroup.append('g').attr('class', 'edges');
+  g.edges().forEach(function(e) {
+    var edgeInfo = g.edge(e);
+    var points = edgeInfo.points;
+    if (!points || points.length < 2) return;
+
+    // Offset points
+    var offsetPoints = points.map(function(p) {
+      return { x: p.x + offsetX, y: p.y + offsetY };
+    });
+
+    // Build smooth path
+    var pathStr = buildSmoothPath(offsetPoints);
+
+    var edgeEl = edgeGroup.append('path')
+      .attr('class', 'edge-path')
+      .attr('d', pathStr)
+      .attr('marker-end', 'url(#arrow)');
+
+    edgeEl.on('mouseover', function() {
+      d3.select(this)
+        .attr('stroke', '#d4af37')
+        .attr('stroke-width', 2.5)
+        .attr('marker-end', 'url(#arrow-hover)');
+    });
+    edgeEl.on('mouseout', function() {
+      d3.select(this)
+        .attr('stroke', '#475569')
+        .attr('stroke-width', 1.5)
+        .attr('marker-end', 'url(#arrow)');
+    });
+  });
+
+  // Draw nodes
+  var nodeGroup = mainGroup.append('g').attr('class', 'nodes');
+  allNodes.forEach(function(nid) {
+    var info = g.node(nid);
+    var ndata = nodeMap[nid] || {};
+    var shape = ndata.shape || 'box';
+    var color = ndata.color || '#64748b';
+    var label = ndata.label || nid;
+    var title = ndata.title || '';
+    var x = info.x + offsetX;
+    var y = info.y + offsetY;
+    var w = info.width;
+    var h = info.height;
+
+    var darker = d3.color(color).darker(0.5);
+
+    var ng = nodeGroup.append('g')
+      .attr('class', 'node-group')
+      .attr('transform', 'translate(' + x + ',' + y + ')');
+
+    if (shape === 'ellipse') {
+      ng.append('ellipse')
+        .attr('rx', w/2 + 6)
+        .attr('ry', h/2 + 4)
+        .attr('fill', color)
+        .attr('stroke', darker)
+        .attr('stroke-width', 1.5)
+        .attr('filter', 'url(#node-shadow)');
+    } else if (shape === 'diamond') {
+      var points = [
+        [0, -h/2 - 4],
+        [w/2 + 6, 0],
+        [0, h/2 + 4],
+        [-w/2 - 6, 0]
+      ].map(function(p) { return p[0] + ',' + p[1]; }).join(' ');
+      ng.append('polygon')
+        .attr('points', points)
+        .attr('fill', color)
+        .attr('stroke', darker)
+        .attr('stroke-width', 1.5);
+    } else {
+      ng.append('rect')
+        .attr('x', -w/2 - 4)
+        .attr('y', -h/2 - 4)
+        .attr('width', w + 8)
+        .attr('height', h + 8)
+        .attr('rx', 12)
+        .attr('fill', color)
+        .attr('stroke', darker)
+        .attr('stroke-width', 2);
+    }
+
+    // Label
+    ng.append('text')
+      .attr('class', 'node-label')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('y', 1)
+      .text(label.length > 16 ? label.substring(0, 14) + '…' : label);
+
+    // Tooltip
+    ng.append('title').text(title || label);
+  });
+
+  // Node shadow filter
+  defs.append('filter')
+    .attr('id', 'node-shadow')
+    .attr('x', '-20%').attr('y', '-20%')
+    .attr('width', '140%').attr('height', '140%')
+    .append('feDropShadow')
+    .attr('dx', 0).attr('dy', 2)
+    .attr('stdDeviation', 4)
+    .attr('flood-color', 'rgba(0,0,0,0.4)');
+
+  // Helper: build smooth orthogonal path
+  function buildSmoothPath(points) {
+    if (points.length < 2) return '';
+    var parts = [];
+    parts.push('M' + points[0].x + ',' + points[0].y);
+
+    for (var i = 1; i < points.length - 1; i++) {
+      var prev = points[i - 1];
+      var curr = points[i];
+      var next = points[i + 1];
+      var r = 8;
+      // Limit radius to half the shorter segment
+      var d1 = Math.sqrt(Math.pow(curr.x - prev.x, 2) + Math.pow(curr.y - prev.y, 2));
+      var d2 = Math.sqrt(Math.pow(next.x - curr.x, 2) + Math.pow(next.y - curr.y, 2));
+      r = Math.min(r, d1 / 2, d2 / 2);
+
+      var dx1 = curr.x - prev.x, dy1 = curr.y - prev.y;
+      var dx2 = next.x - curr.x, dy2 = next.y - curr.y;
+      var len1 = Math.sqrt(dx1*dx1 + dy1*dy1) || 1;
+      var len2 = Math.sqrt(dx2*dx2 + dy2*dy2) || 1;
+      var nx1 = dx1/len1, ny1 = dy1/len1;
+      var nx2 = dx2/len2, ny2 = dy2/len2;
+      var arcX1 = curr.x - nx1 * r;
+      var arcY1 = curr.y - ny1 * r;
+      var arcX2 = curr.x + nx2 * r;
+      var arcY2 = curr.y + ny2 * r;
+      parts.push('L' + arcX1 + ',' + arcY1);
+      parts.push('Q' + curr.x + ',' + curr.y + ' ' + arcX2 + ',' + arcY2);
+    }
+
+    var last = points[points.length - 1];
+    parts.push('L' + last.x + ',' + last.y);
+    return parts.join(' ');
+  }
+
+  document.getElementById('nodeCount').textContent =
+    rawData.nodes.length + ' nodes · ' + rawData.edges.length + ' edges';
+})();
 </script>
 </body>
 </html>
@@ -573,15 +553,10 @@ _DAG_HTML = r"""
 def render_with_vis_html(
     nodes: list[DagNode], edges: list[DagEdge]
 ) -> str:
-    """Build a self-contained HTML string using d3-dag with sugiyama layout."""
+    """Build a self-contained HTML string using dagre.js for clean layout."""
     payload = {
         "nodes": [
-            {
-                "id": n.id,
-                "label": n.label,
-                "color": n.color,
-                "title": n.title,
-            }
+            {"id": n.id, "label": n.label, "color": n.color, "title": n.title, "shape": n.shape}
             for n in nodes
         ],
         "edges": [
@@ -592,18 +567,8 @@ def render_with_vis_html(
     return _DAG_HTML.replace("__DATA__", json.dumps(payload))
 
 
-# ---------------------------------------------------------------------------
-# Streamlit dispatcher
-# ---------------------------------------------------------------------------
-
-
 def render_dag(snapshot: ProjectSnapshot) -> None:
-    """Render the DAG inside a Streamlit app.
-
-    Uses d3-dag with the sugiyama algorithm for clean hierarchical
-    left-to-right layout. Rendered as a self-contained HTML block
-    via st.components.v1.html.
-    """
+    """Render the DAG inside a Streamlit app."""
     import streamlit as st
 
     nodes, edges = build_dag(snapshot)
@@ -616,17 +581,7 @@ def render_dag(snapshot: ProjectSnapshot) -> None:
 
 
 __all__ = [
-    "DagNode",
-    "DagEdge",
-    "build_dag",
-    "render_dag",
-    "render_with_agraph",
-    "render_with_vis_html",
-    "HEALTHY",
-    "SEMI_DOC",
-    "SEMI_TEST",
-    "UNHEALTHY",
-    "SOURCE",
-    "EXPOSURE",
-    "_HEALTH_COLOR",
+    "DagNode", "DagEdge", "build_dag", "render_dag",
+    "render_with_vis_html", "HEALTHY", "SEMI_DOC", "SEMI_TEST",
+    "UNHEALTHY", "SOURCE", "EXPOSURE", "_HEALTH_COLOR",
 ]
