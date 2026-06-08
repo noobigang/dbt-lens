@@ -249,7 +249,7 @@ _DAG_HTML = r"""
 <head>
 <meta charset="utf-8">
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/d3-dag@0.13.1/dist/d3-dag.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-dag@0.11.1/bundle/d3-dag.cjs.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #0f172a; font-family: 'Inter', -apple-system, sans-serif; }
@@ -405,118 +405,164 @@ _DAG_HTML = r"""
   var svg = d3.select('#lens-dag').attr('width', W).attr('height', H);
   svg.selectAll('*').remove();
 
-  // Build d3-dag structure
-  var dag = d3.dagStratify()(rawData.edges.map(function(e) {
-    return { id: e.source, source: e.source, target: e.target };
-  }));
+  // Build node list for d3-dag stratify
+  // Each node needs: id, parentIds (empty array for roots)
+  var nodeIds = new Set(rawData.nodes.map(function(n) { return n.id; }));
+  var dagNodes = rawData.nodes.map(function(n) {
+    return { id: n.id };
+  });
 
-  // Add nodes that aren't in edges (orphans / sources)
-  var edgeIds = new Set();
-  rawData.edges.forEach(function(e) { edgeIds.add(e.source); edgeIds.add(e.target); });
-  rawData.nodes.forEach(function(n) {
-    if (!edgeIds.has(n.id)) {
-      dag.addNode({ id: n.id });
+  // Build edges as parentIds format
+  var parentMap = {};
+  rawData.edges.forEach(function(e) {
+    if (!parentMap[e.target]) parentMap[e.target] = [];
+    parentMap[e.target].push(e.source);
+  });
+
+  // Create dagNodes with parentIds
+  var dagInput = rawData.nodes.map(function(n) {
+    return {
+      id: n.id,
+      parentIds: parentMap[n.id] || []
+    };
+  });
+
+  // Handle nodes with no edges (root orphans) — give them no parentIds
+  dagInput.forEach(function(n) {
+    if (n.parentIds.length === 0 && rawData.edges.length > 0) {
+      // Check if this node appears as a source or target in edges
+      var hasEdge = rawData.edges.some(function(e) {
+        return e.source === n.id || e.target === n.id;
+      });
+      if (!hasEdge && rawData.edges.length > 0) {
+        // Orphan node — keep parentIds empty, it will be a root
+      }
     }
   });
 
-  // Sugiyama layout — clean hierarchical left-to-right
-  var layout = d3.dagSugiyama()
-    .size([H - 40, W - 80])
-    .layerSpacing(60)
-    .nodeSize(function(n) { return [140, 44]; });
+  // Build DAG using d3-dag 0.11.1 CJS bundle
+  // API: d3dag.stratify() and d3dag.sugiyama() (not d3.dagStratify)
+  var stratify = d3dag.stratify();
+  var dag;
+  try {
+    dag = stratify(dagInput);
+  } catch(e) {
+    console.error('d3-dag stratify error:', e);
+    document.getElementById('nodeCount').textContent = 'DAG error: ' + e.message;
+    dag = null;
+  }
 
-  var nodes = layout(dag);
-  var zoom = d3.zoom().scaleExtent([0.3, 2.5]).on('zoom', function(event) {
-    g.attr('transform', event.transform);
-  });
-  svg.call(zoom);
+  if (dag) {
+    // Sugiyama layout — clean hierarchical left-to-right
+    // d3-dag 0.11.1 API: sugiyama().nodeSize([w,h]).layering().decross().coord()
+    var layout = d3dag.sugiyama()
+      .nodeSize(function(n) { return [140, 48]; })
+      .layering(d3dag.layeringSimplex())
+      .decross(d3dag.decrossOpt())
+      .coord(d3dag.coordQuad());
 
-  var g = svg.append('g').attr('transform', 'translate(40, 20)');
+    layout(dag);
 
-  // Arrow marker
-  svg.append('defs').append('marker')
-    .attr('id', 'arrow')
-    .attr('viewBox', '0 -5 10 10')
-    .attr('refX', 8)
-    .attr('refY', 0)
-    .attr('markerWidth', 6)
-    .attr('markerHeight', 6)
-    .attr('orient', 'auto')
-    .append('path')
-    .attr('d', 'M0,-5L10,0L0,5')
-    .attr('class', 'arrowhead');
+    // Zoom behavior
+    var zoom = d3.zoom().scaleExtent([0.25, 2.5]).on('zoom', function(event) {
+      g.attr('transform', event.transform);
+    });
+    svg.call(zoom);
 
-  // Edges
-  g.append('g').attr('class', 'edges')
-    .selectAll('path')
-    .data(dag.links())
-    .enter()
-    .append('path')
-    .attr('class', 'edge-path')
-    .attr('d', function(link) {
-      var s = link.source.layout;
-      var t = link.target.layout;
-      return 'M' + s.x + ',' + s.y + ' C' + (s.x + 60) + ',' + s.y +
-             ' ' + (t.x - 60) + ',' + t.y + ' ' + t.x + ',' + t.y;
-    })
-    .attr('marker-end', 'url(#arrow)');
+    var g = svg.append('g').attr('transform', 'translate(50, 20)');
 
-  // Nodes
-  var nodeGroups = g.append('g').attr('class', 'nodes')
-    .selectAll('g')
-    .data(nodes)
-    .enter()
-    .append('g')
-    .attr('class', 'node-group')
-    .attr('transform', function(n) { return 'translate(' + n.x + ',' + n.y + ')'; });
+    // Arrow marker definition
+    svg.append('defs').append('marker')
+      .attr('id', 'arrow')
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 7)
+      .attr('refY', 0)
+      .attr('markerWidth', 6)
+      .attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,-5L10,0L0,5')
+      .attr('class', 'arrowhead');
 
-  // Draw node rect
-  nodeGroups.append('rect')
-    .attr('class', 'node-box')
-    .attr('x', -70).attr('y', -22)
-    .attr('width', 140).attr('height', 44)
-    .attr('rx', 8)
-    .attr('fill', function(n) {
+    // Draw edges using link points from d3-dag
+    g.append('g').attr('class', 'edges')
+      .selectAll('path')
+      .data(dag.links())
+      .enter()
+      .append('path')
+      .attr('class', 'edge-path')
+      .attr('d', function(link) {
+        var pts = link.points;
+        if (!pts || pts.length < 2) return '';
+        var start = pts[0];
+        var end = pts[pts.length - 1];
+        return 'M' + start.x + ',' + start.y +
+               ' C' + (start.x + 50) + ',' + start.y +
+               ' ' + (end.x - 50) + ',' + end.y +
+               ' ' + end.x + ',' + end.y;
+      })
+      .attr('marker-end', 'url(#arrow)');
+
+    // Draw nodes
+    var allNodes = dag.nodes ? dag.nodes() : dag.descendants();
+
+    var nodeGroups = g.append('g').attr('class', 'nodes')
+      .selectAll('g')
+      .data(allNodes)
+      .enter()
+      .append('g')
+      .attr('class', 'node-group')
+      .attr('transform', function(n) {
+        return 'translate(' + n.x + ',' + n.y + ')';
+      });
+
+    // Node rect
+    nodeGroups.append('rect')
+      .attr('class', 'node-box')
+      .attr('x', -70).attr('y', -24)
+      .attr('width', 140).attr('height', 48)
+      .attr('rx', 10)
+      .attr('fill', function(n) {
+        var nd = nodeMap[n.id] || {};
+        return nd.color || '#64748b';
+      })
+      .attr('stroke', function(n) {
+        var nd = nodeMap[n.id] || {};
+        var c = nd.color || '#64748b';
+        return d3.color(c).darker(0.6);
+      })
+      .attr('stroke-width', 2);
+
+    // Node label
+    nodeGroups.append('text')
+      .attr('class', 'node-label')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('y', 0)
+      .text(function(n) {
+        var label = (nodeMap[n.id] || {}).label || n.id;
+        return label.length > 16 ? label.substring(0, 14) + '…' : label;
+      });
+
+    // Tooltip
+    nodeGroups.append('title').text(function(n) {
       var nd = nodeMap[n.id] || {};
-      return nd.color || '#64748b';
-    })
-    .attr('stroke', function(n) {
-      var nd = nodeMap[n.id] || {};
-      var color = nd.color || '#64748b';
-      return d3.color(color).darker(0.5);
-    })
-    .attr('stroke-width', 1.5);
-
-  // Draw node label
-  nodeGroups.append('text')
-    .attr('class', 'node-label')
-    .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'central')
-    .attr('y', 1)
-    .each(function(n) {
-      var label = (nodeMap[n.id] || {}).label || n.id;
-      var name = label.length > 18 ? label.substring(0, 16) + '…' : label;
-      d3.select(this).text(name);
+      return nd.title || nd.label || n.id;
     });
 
-  // Tooltip on hover
-  nodeGroups.append('title').text(function(n) {
-    var nd = nodeMap[n.id] || {};
-    return nd.title || nd.label || n.id;
-  });
-
-  // Update node count
-  document.getElementById('nodeCount').textContent = rawData.nodes.length + ' nodes · ' + rawData.edges.length + ' edges';
+    document.getElementById('nodeCount').textContent =
+      rawData.nodes.length + ' nodes · ' + rawData.edges.length + ' edges';
+  }
 
   // Zoom controls
   document.getElementById('zoomIn').addEventListener('click', function() {
-    svg.transition().call(zoom.scaleBy, 1.3);
+    svg.transition().duration(300).call(zoom.scaleBy, 1.3);
   });
   document.getElementById('zoomOut').addEventListener('click', function() {
-    svg.transition().call(zoom.scaleBy, 0.75);
+    svg.transition().duration(300).call(zoom.scaleBy, 0.75);
   });
   document.getElementById('zoomFit').addEventListener('click', function() {
-    svg.transition().call(zoom.transform, d3.zoomIdentity);
+    svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
   });
 </script>
 </body>
