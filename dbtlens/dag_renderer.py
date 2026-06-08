@@ -255,7 +255,7 @@ _DAG_HTML = r"""
   /* SVG node styles */
   .node-group { cursor: pointer; }
   .node-group:hover .node-box { filter: brightness(1.2); }
-  .node-label { font-size: 12px; font-weight: 500; fill: white; pointer-events: none; font-family: 'Inter', sans-serif; }
+  .node-label { font-size: 11px; font-weight: 500; fill: white; pointer-events: none; font-family: 'Inter', sans-serif; letter-spacing: 0.2px; }
   .edge-path { fill: none; stroke: #475569; stroke-width: 1.5px; }
   .edge-path:hover { stroke: #d4af37; stroke-width: 2.5px; }
   .arrow-marker { fill: #475569; }
@@ -328,24 +328,25 @@ _DAG_HTML = r"""
     .attr('d', 'M0,-5L10,0L0,5')
     .attr('fill', '#d4af37');
 
-  // Build dagre graph
+  // Build dagre graph — clean left-to-right layout
   var g = new dagre.graphlib.Graph();
   g.setGraph({
     rankdir: 'LR',
-    nodesep: 55,
-    ranksep: 100,
-    marginx: 50,
-    marginy: 50,
-    edgesep: 20
+    nodesep: 50,
+    ranksep: 80,
+    marginx: 60,
+    marginy: 60,
+    edgesep: 10,
+    ranker: 'tight-sidebar'
   });
   g.setDefaultEdgeLabel(function() { return {}; });
 
-  // Add nodes to dagre
+  // Add nodes to dagre — wider nodes prevent label truncation
   rawData.nodes.forEach(function(n) {
     var isSource = n.shape === 'ellipse';
     var isExposure = n.shape === 'diamond';
-    var w = isSource || isExposure ? 140 : 130;
-    var h = 44;
+    var w = isSource || isExposure ? 150 : 170;
+    var h = 40;
     g.setNode(n.id, { width: w, height: h });
   });
 
@@ -484,13 +485,13 @@ _DAG_HTML = r"""
         .attr('stroke-width', 2);
     }
 
-    // Label
+    // Label — allow more characters with wider nodes + smaller font
     ng.append('text')
       .attr('class', 'node-label')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
       .attr('y', 1)
-      .text(label.length > 16 ? label.substring(0, 14) + '…' : label);
+      .text(label.length > 20 ? label.substring(0, 18) + '…' : label);
 
     // Tooltip
     ng.append('title').text(title || label);

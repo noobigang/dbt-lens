@@ -552,21 +552,9 @@ def main() -> None:
     st.markdown(
         "<span style='font-size:0.82rem; color:#64748b; display:block; max-width:900px; line-height:1.5;'>"
         "Your project's <b>DAG</b> — a map of how every model connects from sources (left) "
-        "to final business tables (right). Node color = health status."
+        "to final business tables (right). Hover nodes for details. Node color = health status. "
+        "Legend in the top-right corner of the DAG."
         "</span>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        """
-        <div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:4px; font-size:0.78rem; color:#475569;">
-            <span><span style="background:#16a34a; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Tested & documented</span>
-            <span><span style="background:#eab308; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Tests only</span>
-            <span><span style="background:#ea580c; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Docs only</span>
-            <span><span style="background:#dc2626; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Neither</span>
-            <span><span style="background:#2563eb; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Source</span>
-            <span><span style="background:#9333ea; padding:2px 8px; border-radius:4px; color:white; font-weight:600;">●</span> Exposure</span>
-        </div>
-        """,
         unsafe_allow_html=True,
     )
     dag_renderer.render_dag(snapshot)
