@@ -96,6 +96,16 @@ def _text_centered(draw: ImageDraw.ImageDraw, text: str,
 # Card generation
 # ---------------------------------------------------------------------------
 
+def score_to_grade(s: int) -> str:
+    """Map a 0-100 score to a letter grade (matches scorer.grade)."""
+    if s >= 95: return "A+"
+    if s >= 90: return "A"
+    if s >= 80: return "B"
+    if s >= 70: return "C"
+    if s >= 60: return "D"
+    return "F"
+
+
 def generate_card(
     project_name: str,
     score: int,
@@ -103,12 +113,9 @@ def generate_card(
     footer_url: str = "dbt-lens.streamlit.app",
     grade: str | None = None,
 ) -> Image.Image:
-    """Render a 1200x630 share card.
-
-    This is a TOOL PROMO card — shows a compelling example score (78/B)
-    so people see the value immediately. Viral hook = "I built this / try it"
-    not "here's my personal score".
-    """
+    """Render a 1200x630 share card."""
+    # Resolve grade from score if not provided
+    letter = grade if grade is not None else score_to_grade(score)
     # ── Background ──────────────────────────────────────────────────────────
     img = Image.new("RGB", (CARD_W, CARD_H), BG_TOP)
     draw = ImageDraw.Draw(img)
@@ -153,9 +160,9 @@ def generate_card(
     draw.ellipse([cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer],
                  fill=(30, 40, 65), outline=ACCENT, width=4)
 
-    # Example score: 78
+    # Score number
     big_f = _font(_FONT_BOLD, 90)
-    draw.text((cx - 60, cy - 65), "78", font=big_f, fill=GREEN)
+    draw.text((cx - 60, cy - 65), str(score), font=big_f, fill=GREEN)
 
     # "/100" below circle
     slash_f = _font(_FONT_REG, 24)
@@ -165,11 +172,21 @@ def generate_card(
     badge_f = _font(_FONT_BOLD, 48)
     bx, by = 330, 230
     draw.ellipse([bx - 36, by - 36, bx + 36, by + 36], fill=ACCENT)
-    draw.text((bx - 16, by - 28), "B", font=badge_f, fill=(15, 23, 42))
+    draw.text((bx - 16, by - 28), letter, font=badge_f, fill=(15, 23, 42))
 
     # Verdict
     verdict_f = _font(_FONT_REG, 22)
-    draw.text((40, 465), "Healthy. A few polish items.", font=verdict_f, fill=TEXT_SECONDARY)
+    if score >= 90:
+        verdict = "Battle-tested dbt project. Ship it."
+    elif score >= 75:
+        verdict = "Healthy project. A few polish items."
+    elif score >= 60:
+        verdict = "Decent foundation. Real gaps to close."
+    elif score >= 40:
+        verdict = "Risky. Production data is exposed."
+    else:
+        verdict = "Critical. Do not trust the numbers yet."
+    draw.text((40, 465), verdict, font=verdict_f, fill=TEXT_SECONDARY)
 
     # Stats row
     stat_val_f = _font(_FONT_BOLD, 22)
