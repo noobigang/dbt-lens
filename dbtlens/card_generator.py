@@ -98,11 +98,16 @@ def _text_centered(draw: ImageDraw.ImageDraw, text: str,
 
 def score_to_grade(s: int) -> str:
     """Map a 0-100 score to a letter grade (matches scorer.grade)."""
-    if s >= 95: return "A+"
-    if s >= 90: return "A"
-    if s >= 80: return "B"
-    if s >= 70: return "C"
-    if s >= 60: return "D"
+    if s >= 95:
+        return "A+"
+    if s >= 90:
+        return "A"
+    if s >= 80:
+        return "B"
+    if s >= 70:
+        return "C"
+    if s >= 60:
+        return "D"
     return "F"
 
 
