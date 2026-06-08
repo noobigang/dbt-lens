@@ -90,6 +90,10 @@ class FixSuggestion:
     title: str
     explanation: str
     points_recoverable: float
+    # New: specific models that need attention (empty if N/A)
+    affected_models: tuple[str, ...] = field(default_factory=tuple)
+    # New: exact code / YAML snippets to copy-paste (title + code pairs)
+    code_blocks: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -443,95 +447,314 @@ def _score_materialization_maturity(snapshot: ProjectSnapshot) -> DimensionScore
 
 def _generate_fixes(
     dimensions: tuple[DimensionScore, ...],
+    snapshot: ProjectSnapshot,
 ) -> tuple[FixSuggestion, ...]:
-    """Pick the top 3 fixes based on which dimensions lost the most points."""
+    """Pick the top 3 fixes based on which dimensions lost the most points.
+    
+    Each fix includes specific model names and copy-paste-ready code snippets.
+    """
     candidates: list[FixSuggestion] = []
+
+    tested_ids = {t.attached_node for t in snapshot.tests}
 
     for d in dimensions:
         if d.missing <= 0:
             continue
+
         if d.name == "Test coverage":
+            # Find untested models, prioritise marts
+            untested_marts = [
+                m.name for m in snapshot.models
+                if m.is_model and m.layer == "marts"
+                and m.unique_id not in tested_ids
+            ]
+            untested_other = [
+                m.name for m in snapshot.models
+                if m.is_model and m.layer != "marts"
+                and m.unique_id not in tested_ids
+            ]
+            all_names = untested_marts + untested_other
+            top_names = all_names[:5]
+
+            # Build code snippet
+            if top_names:
+                example_model = top_names[0]
+                snippet = f"""\
+# Add to your model's .yml file (e.g. models/marts/{example_model}.yml)
+
+version: 2
+
+models:
+  - name: {example_model}
+    description: "One-sentence description of what this model does and why it exists."
+    tests:
+      - not_null:
+          column_name: id          # ← replace with actual primary key
+      - unique:
+          column_name: id          # ← replace with actual primary key
+    columns:
+      - name: id
+        description: "Primary key — guaranteed unique and non-null."
+      - name: created_at
+        description: "Timestamp when the record was created."
+      - name: updated_at
+        description: "Timestamp when the record was last modified." """
+            else:
+                snippet = ""
+
             candidates.append(
                 FixSuggestion(
                     rank=0,
                     dimension=d.name,
                     title="Add tests to your most important models",
                     explanation=(
-                        "Marts (fct_/dim_) are weighted 2x. Add a `not_null` "
-                        "and `unique` test to the primary key of every mart, "
-                        "then work outward."
+                        "Marts (fct_/dim_) are weighted 2× — adding tests "
+                        "there recovers the most points. Start with your "
+                        "fact and dimension tables, then work outward to "
+                        "staging and intermediate layers."
                     ),
                     points_recoverable=d.missing,
+                    affected_models=tuple(top_names),
+                    code_blocks=(
+                        ("YAML — add to models/<layer>/<model>.yml", snippet),
+                    ) if snippet else (),
                 )
             )
+
         elif d.name == "Documentation":
+            # Find undocumented or partially-documented models
+            undocumented = [
+                m.name for m in snapshot.models
+                if m.is_model and not m.has_description
+            ]
+            partially_doc = [
+                m.name for m in snapshot.models
+                if m.is_model and m.has_description
+                and m.columns
+                and any(not c.description.strip() for c in m.columns)
+            ]
+            top_names = (undocumented + partially_doc)[:5]
+
+            snippet = ""
+            if top_names:
+                ex = top_names[0]
+                snippet = f"""\
+# Option 1: In the .yml file (recommended)
+version: 2
+
+models:
+  - name: {ex}
+    description: "Describe what this model does and what business question it answers."
+
+# Option 2: In the .sql model file itself
+{{{{ config(materialized='table') }}}}
+
+{{{{ doc '{ex}_description' }}}}
+
+SELECT ...
+
+# Then in dbt_project.yml / models/*.yml define the doc block:
+# docs:
+#   - name: {ex}_description
+#     description: |
+#       Full description of what this model does.
+#       Can span multiple lines."""
+
             candidates.append(
                 FixSuggestion(
                     rank=0,
                     dimension=d.name,
-                    title="Document your models and sources",
+                    title="Document your models and columns",
                     explanation=(
-                        "Add a `description:` to each model. Then add a "
-                        "`columns:` block with descriptions for every column "
-                        "— dbt docs will render as a real catalog."
+                        "Every model needs a `description:` and every column "
+                        "needs a one-line description. Undocumented models "
+                        "are a maintenance nightmare — six months later, "
+                        "nobody knows what `int_pivot_3` actually does."
                     ),
                     points_recoverable=d.missing,
+                    affected_models=tuple(top_names),
+                    code_blocks=(
+                        ("YAML + SQL — two ways to add descriptions", snippet),
+                    ) if snippet else (),
                 )
             )
+
         elif d.name == "Structure":
+            orphans = snapshot.orphans()
+            depth = snapshot.max_lineage_depth()
+            issues: list[str] = []
+            if orphans:
+                issues += orphans[:3]
+            if depth > MAX_HEALTHY_LINEAGE_DEPTH:
+                issues.append(f"Lineage is {depth} levels deep (max recommended: 5)")
+
+            snippet = ""
+            if orphans:
+                example = orphans[0]
+                snippet = f"""\
+# Orphan model: {example}
+
+# Check if {example} is actually used anywhere:
+grep -r "{example}" models/
+
+# If not used → either delete it or document why it exists.
+# If used but not wired in dbt's dependency graph,
+# make sure it's referenced via ref() in a downstream model.
+
+# Common cause of orphans: the model file exists but isn't
+# included via a ref() call anywhere in the project."""
+
             candidates.append(
                 FixSuggestion(
                     rank=0,
                     dimension=d.name,
-                    title="Tighten your DAG structure",
+                    title="Clean up your DAG structure",
                     explanation=(
-                        "Aim for staging (stg_*) → intermediate (int_*) → "
-                        "marts (fct_/dim_). Remove orphan models, break long "
-                        "lineage chains deeper than 5 levels."
+                        "Orphan models (no parents and no children) are dead "
+                        "code — they run but nobody uses them. Lineage deeper "
+                        "than 5 levels is hard to debug. Keep the DAG flat and "
+                        "linear: staging → intermediate → marts."
                     ),
                     points_recoverable=d.missing,
+                    affected_models=tuple(issues[:5]),
+                    code_blocks=(
+                        ("Bash — find orphan usage", snippet),
+                    ) if snippet else (),
                 )
             )
+
         elif d.name == "Naming":
-            candidates.append(
-                FixSuggestion(
-                    rank=0,
-                    dimension=d.name,
-                    title="Adopt snake_case naming everywhere",
-                    explanation=(
-                        "Rename any UPPERCASE or CamelCase model files to "
-                        "lowercase snake_case. This makes ref() calls in "
-                        "downstream models easier to grep for."
-                    ),
-                    points_recoverable=d.missing,
+            bad = [
+                m.name for m in snapshot.models
+                if m.is_model and not _SNAKE_OK.match(m.name)
+            ]
+            if bad:
+                example = bad[0]
+                snippet = f"""\
+# Rename model file and update all ref() calls
+
+# 1. Rename the file:
+mv models/{example}.sql models/{example.lower().replace('_', '-')}.sql
+
+# 2. Find and update all ref() calls:
+grep -rn "{example}" models/
+
+# 3. Run dbt to verify:
+dbt deps && dbt compile
+
+# dbt-lens also flags non-snake_case names, so run the score
+# again after renaming to confirm the Naming score improved."""
+
+                candidates.append(
+                    FixSuggestion(
+                        rank=0,
+                        dimension=d.name,
+                        title="Standardise model naming to snake_case",
+                        explanation=(
+                            "Mixed naming (CamelCase, UPPERCASE) is a red flag "
+                            "for multiple authors with no agreed standard. "
+                            "Rename every non-compliant model to lowercase "
+                            "snake_case and update all downstream `ref()` calls."
+                        ),
+                        points_recoverable=d.missing,
+                        affected_models=tuple(bad[:5]),
+                        code_blocks=(
+                            ("Bash — rename model + update refs", snippet),
+                        ),
+                    )
                 )
-            )
+
         elif d.name == "Exposures":
+            snippet = """\
+# Add to models/exposures.yml (create if it doesn't exist)
+
+version: 2
+
+exposures:
+  - name: weekly_revenue_dashboard
+    description: "Looker Studio dashboard showing weekly revenue KPIs."
+    type: dashboard
+    maturity: high
+    owner:
+      name: Data Team
+      email: data@example.com
+    depends_on:
+      - ref('fct_orders')
+      - ref('dim_customers')
+    meta:
+      tool: looker
+      url: "https://looker.example.com/dashboards/123" """
+
             candidates.append(
                 FixSuggestion(
                     rank=0,
                     dimension=d.name,
-                    title="Define exposures for downstream consumers",
+                    title="Declare your downstream consumers as exposures",
                     explanation=(
-                        "Add an `exposures:` YAML block declaring every "
-                        "dashboard, notebook, or app that reads from your "
-                        "marts. dbt's lineage will then show end-to-end flow."
+                        "Exposures tell dbt which dashboards, notebooks, and "
+                        "apps consume your models. With zero exposures, your "
+                        "project is a black box — nobody outside the data team "
+                        "knows what data is actually being used."
                     ),
                     points_recoverable=d.missing,
+                    affected_models=(),
+                    code_blocks=(
+                        ("YAML — models/exposures.yml", snippet),
+                    ),
                 )
             )
+
         elif d.name == "Materialization maturity":
+            # Find marts that look incremental-eligible but aren't
+            mart_ids = {m.unique_id for m in snapshot.models if m.is_model and m.layer == "marts"}
+            id_to_parents = {m.unique_id: len(m.depends_on) for m in snapshot.models if m.is_model}
+            eligible = [
+                m for m in snapshot.models
+                if m.is_model
+                and m.unique_id in mart_ids
+                and m.name.lower().startswith(("fct_", "dim_"))
+                and id_to_parents.get(m.unique_id, 0) >= 2
+            ]
+            not_inc = [m.name for m in eligible if m.materialized != "incremental"]
+            top_names = not_inc[:5]
+
+            snippet = ""
+            if top_names:
+                ex = top_ll[0] if (top_ll := not_inc[:1]) else "fct_orders"
+                snippet = f"""\
+# In your model .sql file, change the config:
+
+# Before (rebuilds from scratch every run):
+{{{{ config(materialized='table') }}}}
+
+# After (appends new rows only — much faster in production):
+{{{{ config(materialized='incremental', unique_key='id') }}}}
+
+# Or in dbt_project.yml for all models in a directory:
+models:
+  my_project:
+    marts:
+      +materialized: incremental
+      +unique_key: id       # ← replace with your actual PK column
+      +incremental_strategy: insert_overwrite  # for BigQuery/Snowflake
+"""
+
             candidates.append(
                 FixSuggestion(
                     rank=0,
                     dimension=d.name,
-                    title="Use the right materialization for the job",
+                    title="Switch heavy fact tables to incremental",
                     explanation=(
-                        "Heavy fact tables should be `incremental` with a "
-                        "tested unique key. Slowly-changing dimensions can be "
-                        "`snapshot`ts. Reference models stay as `view`s."
+                        "Fact tables with multiple upstream sources should be "
+                        "`incremental` — rebuilding from scratch every run is "
+                        "expensive and slow. Add `unique_key` (your PK column) "
+                        "and dbt will only process new rows since the last run."
                     ),
                     points_recoverable=d.missing,
+                    affected_models=tuple(top_names),
+                    code_blocks=(
+                        ("SQL config — switch table → incremental", snippet),
+                    ) if snippet else (),
                 )
             )
 
@@ -544,6 +767,8 @@ def _generate_fixes(
             dimension=c.dimension,
             explanation=c.explanation,
             points_recoverable=c.points_recoverable,
+            affected_models=c.affected_models,
+            code_blocks=c.code_blocks,
         )
         for i, c in enumerate(top)
     )
@@ -577,7 +802,7 @@ def score_project(snapshot: ProjectSnapshot) -> HealthScore:
     return HealthScore(
         total=total_int,
         dimensions=tuple(dims),
-        fixes=_generate_fixes(tuple(dims)),
+        fixes=_generate_fixes(tuple(dims), snapshot),
         project_name=snapshot.project_name,
         model_count=snapshot.model_count,
         source_count=len(snapshot.sources),

@@ -1,6 +1,8 @@
 # 🔬 dbt Lens
 
-### Drop your `manifest.json` → get a 0–100 health score, an interactive DAG, and a shareable LinkedIn card. Free. No login. Instant.
+**Drop your `manifest.json` → get a 0–100 health score, an interactive DAG, and a shareable LinkedIn card. Free. No login. Instant.**
+
+![dbt Lens banner](data/banner.png)
 
 [![Streamlit App](https://img.shields.io/endpoint?url=https://streamlit-badge-6zyf.onrender.com/?app=dbt-lens-ewpztmgj8ppbnlk5ddyvsy&logo=streamlit&theme=light)](https://dbt-lens-ewpztmgj8ppbnlk5ddyvsy.streamlit.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-gold.svg)](LICENSE)

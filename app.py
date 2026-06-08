@@ -413,12 +413,12 @@ def _render_comparison(user_score: int, user_label: str) -> None:
 
 
 def _render_fixes(score: scorer.HealthScore) -> None:
-    """Render the 'Top 3 fixes' list."""
+    """Render the 'Top 3 fixes' list with specific model names and code snippets."""
     st.subheader("🛠 Top fixes")
     st.markdown(
         "<span style='font-size:0.82rem; color:#64748b;'>"
         "These are the highest-impact changes you can make to improve your score. "
-        "Each fix shows how many points you recover and which dimension it belongs to. "
+        "Each fix includes the specific models to target and copy-paste-ready code. "
         "Start with #1 — it's the biggest lever."
         "</span>",
         unsafe_allow_html=True,
@@ -426,15 +426,54 @@ def _render_fixes(score: scorer.HealthScore) -> None:
     if not score.fixes:
         st.success("No major gaps detected — your project is in good shape.")
         return
+
+    # Dimension → icon + colour map
+    dim_colors = {
+        "Test coverage": ("🔬", "#d4af37"),
+        "Documentation": ("📝", "#16a34a"),
+        "Structure": ("🕸", "#2563eb"),
+        "Naming": ("🏷", "#9333ea"),
+        "Exposures": ("🔗", "#ea580c"),
+        "Materialization maturity": ("⚡", "#0891b2"),
+    }
+
     for fix in score.fixes:
+        icon, color = dim_colors.get(fix.dimension, ("•", "#64748b"))
         with st.container(border=True):
+            # Header row
             st.markdown(
-                f"**#{fix.rank} — {fix.title}**  "
-                f"<span style='color:#64748b'>(recover ~{fix.points_recoverable:g} pts, "
-                f"dimension: {fix.dimension})</span>",
+                f"<div style='display:flex; align-items:center; gap:10px; margin-bottom:6px;'>"
+                f"<span style='font-size:1.3rem;'>{icon}</span>"
+                f"<span style='font-size:1.05rem; font-weight:700; color:#0f172a;'>"
+                f"#{fix.rank} — {fix.title}</span>"
+                f"<span style='background:{color}; color:white; font-size:0.72rem; font-weight:700; "
+                f"padding:3px 8px; border-radius:12px; margin-left:4px;'>{fix.dimension}</span>"
+                f"<span style='color:#d4af37; font-weight:700; font-size:0.82rem; margin-left:auto;'>"
+                f"+{fix.points_recoverable:.0f} pts</span>"
+                f"</div>",
                 unsafe_allow_html=True,
             )
-            st.write(fix.explanation)
+            st.markdown(f"<span style='color:#475569; font-size:0.83rem;'>{fix.explanation}</span>",
+                        unsafe_allow_html=True)
+
+            # Affected models
+            if fix.affected_models:
+                names = " · ".join(f"`{m}`" for m in fix.affected_models)
+                st.markdown(
+                    f"<div style='margin-top:8px; margin-bottom:4px;'>"
+                    f"<span style='font-size:0.78rem; font-weight:700; color:#64748b;'>"
+                    f"AFFECTED MODELS:</span>  {names}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # Code blocks
+            for block_title, code in fix.code_blocks:
+                st.markdown(
+                    f"<div style='margin-top:8px; margin-bottom:2px;'>"
+                    f"<span style='font-size:0.75rem; font-weight:700; color:#94a3b8;'>{block_title}</span></div>",
+                    unsafe_allow_html=True,
+                )
+                st.code(code, language="yaml")
 
 
 def _render_share_card(score: scorer.HealthScore) -> None:
