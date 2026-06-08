@@ -213,42 +213,69 @@ def render_with_agraph(nodes: list[DagNode], edges: list[DagEdge]) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Fallback: vis-network via st.components.v1.html
+# d3-dag renderer — hierarchical (sugiyama) layout, no backward arrows
 # ---------------------------------------------------------------------------
 
+# Health colors (fill, border)
+_HEALTH_FILL = {
+    HEALTHY: "#22c55e",
+    SEMI_DOC: "#eab308",
+    SEMI_TEST: "#f97316",
+    UNHEALTHY: "#ef4444",
+    SOURCE: "#3b82f6",
+    EXPOSURE: "#a855f7",
+}
+_HEALTH_BORDER = {
+    HEALTHY: "#16a34a",
+    SEMI_DOC: "#ca8a04",
+    SEMI_TEST: "#ea580c",
+    UNHEALTHY: "#dc2626",
+    SOURCE: "#2563eb",
+    EXPOSURE: "#9333ea",
+}
+_HEALTH_TEXT = {
+    HEALTHY: "#f0fdf4",
+    SEMI_DOC: "#1c1917",
+    SEMI_TEST: "#fff7ed",
+    UNHEALTHY: "#fef2f2",
+    SOURCE: "#eff6ff",
+    EXPOSURE: "#faf5ff",
+}
 
-_VIS_HTML = r"""
+
+_DAG_HTML = r"""
 <!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script type="text/javascript" src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-dag@0.13.1/dist/d3-dag.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #0f172a; font-family: 'Inter', -apple-system, sans-serif; }
+
   .dag-wrapper {
-    position: relative;
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
     border-radius: 16px;
     overflow: hidden;
     padding: 20px;
     border: 1px solid rgba(255,255,255,0.08);
     box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }
   .dag-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
-    padding: 0 4px;
+    margin-bottom: 14px;
+    flex-shrink: 0;
   }
   .dag-title {
     color: #f8fafc;
     font-size: 15px;
     font-weight: 600;
-    letter-spacing: 0.3px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -265,27 +292,33 @@ _VIS_HTML = r"""
     letter-spacing: 0.5px;
     text-transform: uppercase;
   }
-  #lens-dag {
-    width: 100%; height: 580px;
+
+  #lens-dag-container {
+    flex: 1;
+    position: relative;
     border-radius: 10px;
     border: 1px solid rgba(255,255,255,0.06);
     background: rgba(255,255,255,0.02);
+    overflow: hidden;
   }
+  #lens-dag { width: 100%; height: 100%; }
+  #lens-dag svg { display: block; }
+
   .legend {
-    position: absolute; top: 72px; right: 20px;
-    background: rgba(15,23,42,0.92);
+    position: absolute; top: 14px; right: 14px;
+    background: rgba(15,23,42,0.94);
     backdrop-filter: blur(12px);
-    padding: 16px 20px; border-radius: 12px;
-    font-size: 12px;
+    padding: 14px 18px; border-radius: 12px;
+    font-size: 11.5px;
     border: 1px solid rgba(255,255,255,0.1);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-    min-width: 220px;
-    max-width: 240px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    min-width: 210px;
+    z-index: 10;
   }
   .legend-title {
     color: #94a3b8;
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 1px;
     text-transform: uppercase;
     margin-bottom: 10px;
@@ -293,106 +326,197 @@ _VIS_HTML = r"""
     border-bottom: 1px solid rgba(255,255,255,0.08);
   }
   .legend-row {
-    display: flex;
-    align-items: center;
-    margin-bottom: 7px;
-    color: #cbd5e1;
-    font-weight: 500;
+    display: flex; align-items: center; margin-bottom: 7px; color: #cbd5e1; font-weight: 500;
   }
   .legend-row:last-child { margin-bottom: 0; }
   .legend-dot {
-    width: 10px; height: 10px; border-radius: 50%; margin-right: 9px;
-    flex-shrink: 0; border: 2px solid rgba(255,255,255,0.15);
+    width: 10px; height: 10px; border-radius: 3px; margin-right: 9px; flex-shrink: 0;
   }
+
   .controls {
-    position: absolute; bottom: 32px; right: 32px;
-    display: flex; flex-direction: column; gap: 6px;
+    position: absolute; bottom: 14px; right: 14px;
+    display: flex; flex-direction: column; gap: 5px; z-index: 10;
   }
   .ctrl-btn {
     width: 34px; height: 34px; border-radius: 8px;
-    background: rgba(15,23,42,0.9);
+    background: rgba(15,23,42,0.92);
     border: 1px solid rgba(255,255,255,0.12);
     color: #94a3b8; font-size: 16px;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-    backdrop-filter: blur(8px);
+    transition: all 0.15s; backdrop-filter: blur(8px);
+    user-select: none;
   }
   .ctrl-btn:hover { background: rgba(212,175,55,0.2); color: #d4af37; border-color: rgba(212,175,55,0.4); }
+
   .node-count {
-    position: absolute; bottom: 32px; left: 32px;
+    position: absolute; bottom: 14px; left: 14px;
     background: rgba(15,23,42,0.9);
     border: 1px solid rgba(255,255,255,0.1);
-    color: #64748b; font-size: 12px; font-weight: 500;
-    padding: 8px 14px; border-radius: 20px;
-    backdrop-filter: blur(8px);
+    color: #64748b; font-size: 11px; font-weight: 500;
+    padding: 7px 12px; border-radius: 20px;
+    backdrop-filter: blur(8px); z-index: 10;
   }
-  /* Kill vis-network's built-in nav buttons — we use our own controls */
-  .vis-navigation { display: none !important; }
-  .vis-zoom-actions { display: none !important; }
+
+  /* Node styles */
+  .node-group { cursor: pointer; }
+  .node-group:hover .node-box { filter: brightness(1.15); }
+  .node-box { transition: filter 0.15s; }
+  .node-label { font-size: 12px; font-weight: 500; fill: white; pointer-events: none; }
+  .edge-path { fill: none; stroke: rgba(148,163,184,0.45); stroke-width: 1.5px; }
+  .edge-path:hover { stroke: #d4af37; stroke-width: 2px; }
+  .arrowhead { fill: rgba(148,163,184,0.6); }
 </style>
 </head>
 <body>
 <div class="dag-wrapper">
   <div class="dag-header">
     <div class="dag-title"><span>🔬</span> dbt Lens — Project DAG</div>
-    <div class="dag-badge">Interactive</div>
+    <div class="dag-badge">Hierarchical · Sugiyama layout</div>
   </div>
-  <div id="lens-dag"></div>
-  <div class="legend">
-    <div class="legend-title">Model Health</div>
-    <div class="legend-row"><div class="legend-dot" style="background:#22c55e;border-color:#16a34a"></div> Healthy (tested & documented)</div>
-    <div class="legend-row"><div class="legend-dot" style="background:#eab308;border-color:#ca8a04"></div> Tests only</div>
-    <div class="legend-row"><div class="legend-dot" style="background:#f97316;border-color:#ea580c"></div> Docs only</div>
-    <div class="legend-row"><div class="legend-dot" style="background:#ef4444;border-color:#dc2626"></div> Neither</div>
-    <div class="legend-row"><div class="legend-dot" style="background:#3b82f6;border-color:#2563eb"></div> Source</div>
-    <div class="legend-row"><div class="legend-dot" style="background:#a855f7;border-color:#9333ea"></div> Exposure</div>
+  <div id="lens-dag-container">
+    <svg id="lens-dag"></svg>
+    <div class="legend">
+      <div class="legend-title">Model Health</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#22c55e"></div> Tested & documented</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#eab308"></div> Tests only</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#f97316"></div> Docs only</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#ef4444"></div> Neither tested nor documented</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#3b82f6"></div> Source</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#a855f7"></div> Exposure</div>
+    </div>
+    <div class="controls">
+      <button class="ctrl-btn" id="zoomIn" title="Zoom in">+</button>
+      <button class="ctrl-btn" id="zoomOut" title="Zoom out">−</button>
+      <button class="ctrl-btn" id="zoomFit" title="Fit">⊡</button>
+    </div>
+    <div class="node-count" id="nodeCount"></div>
   </div>
-  <div class="controls">
-    <button class="ctrl-btn" onclick="network.zoomIn()" title="Zoom in">+</button>
-    <button class="ctrl-btn" onclick="network.zoomOut()" title="Zoom out">−</button>
-    <button class="ctrl-btn" onclick="network.fit({animation:{duration:500,easingFunction:'easeInOutQuad'}})" title="Fit">⊡</button>
-  </div>
-  <div class="node-count" id="nodeCount"></div>
 </div>
 <script type="text/javascript">
-  var data = __DATA__;
-  var container = document.getElementById('lens-dag');
-  document.getElementById('nodeCount').textContent = data.nodes.length + ' nodes · ' + data.edges.length + ' edges';
-  var options = {
-    nodes: {
-      borderWidth: 2,
-      shadow: { enabled: true, color: 'rgba(0,0,0,0.4)', size: 8, x: 0, y: 3 },
-      font: { color: '#fff', size: 13, face: 'Inter, -apple-system, sans-serif', strokeWidth: 3, strokeColor: 'rgba(15,23,42,0.8)' },
-      margin: { top: 8, right: 12, bottom: 8, left: 12 },
-    },
-    edges: {
-      color: { color: 'rgba(148,163,184,0.4)', highlight: '#d4af37', hover: '#d4af37' },
-      width: 1.5,
-      arrows: { to: { enabled: true, scaleFactor: 0.6 } },
-      smooth: { type: 'cubicBezier', roundness: 0.3 }
-    },
-    physics: {
-      enabled: true,
-      solver: 'forceAtlas2Based',
-      forceAtlas2Based: { gravitationalConstant: -50, springLength: 130, springConstant: 0.08, damping: 0.4 },
-      stabilization: { iterations: 250 }
-    },
-    interaction: {
-      hover: true,
-      tooltipDelay: 80,
-      zoomView: true,
-      dragView: true,
-      keyboard: true,
-      navigationButtons: false
+  var rawData = __DATA__;
+  var nodeMap = {};
+  rawData.nodes.forEach(function(n) { nodeMap[n.id] = n; });
+
+  var container = document.getElementById('lens-dag-container');
+  var svgEl = document.getElementById('lens-dag');
+  var W = container.clientWidth || 900;
+  var H = container.clientHeight || 600;
+
+  var svg = d3.select('#lens-dag').attr('width', W).attr('height', H);
+  svg.selectAll('*').remove();
+
+  // Build d3-dag structure
+  var dag = d3.dagStratify()(rawData.edges.map(function(e) {
+    return { id: e.source, source: e.source, target: e.target };
+  }));
+
+  // Add nodes that aren't in edges (orphans / sources)
+  var edgeIds = new Set();
+  rawData.edges.forEach(function(e) { edgeIds.add(e.source); edgeIds.add(e.target); });
+  rawData.nodes.forEach(function(n) {
+    if (!edgeIds.has(n.id)) {
+      dag.addNode({ id: n.id });
     }
-  };
-  var network = new vis.Network(container, data, options);
-  network.once('stabilizationIterationsDone', function() { network.setOptions({ physics: { enabled: false } }); });
-  network.on('hoverNode', function(props) {
-    document.body.style.cursor = 'pointer';
   });
-  network.on('blurrNode', function(props) {
-    document.body.style.cursor = 'default';
+
+  // Sugiyama layout — clean hierarchical left-to-right
+  var layout = d3.dagSugiyama()
+    .size([H - 40, W - 80])
+    .layerSpacing(60)
+    .nodeSize(function(n) { return [140, 44]; });
+
+  var nodes = layout(dag);
+  var zoom = d3.zoom().scaleExtent([0.3, 2.5]).on('zoom', function(event) {
+    g.attr('transform', event.transform);
+  });
+  svg.call(zoom);
+
+  var g = svg.append('g').attr('transform', 'translate(40, 20)');
+
+  // Arrow marker
+  svg.append('defs').append('marker')
+    .attr('id', 'arrow')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 8)
+    .attr('refY', 0)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-5L10,0L0,5')
+    .attr('class', 'arrowhead');
+
+  // Edges
+  g.append('g').attr('class', 'edges')
+    .selectAll('path')
+    .data(dag.links())
+    .enter()
+    .append('path')
+    .attr('class', 'edge-path')
+    .attr('d', function(link) {
+      var s = link.source.layout;
+      var t = link.target.layout;
+      return 'M' + s.x + ',' + s.y + ' C' + (s.x + 60) + ',' + s.y +
+             ' ' + (t.x - 60) + ',' + t.y + ' ' + t.x + ',' + t.y;
+    })
+    .attr('marker-end', 'url(#arrow)');
+
+  // Nodes
+  var nodeGroups = g.append('g').attr('class', 'nodes')
+    .selectAll('g')
+    .data(nodes)
+    .enter()
+    .append('g')
+    .attr('class', 'node-group')
+    .attr('transform', function(n) { return 'translate(' + n.x + ',' + n.y + ')'; });
+
+  // Draw node rect
+  nodeGroups.append('rect')
+    .attr('class', 'node-box')
+    .attr('x', -70).attr('y', -22)
+    .attr('width', 140).attr('height', 44)
+    .attr('rx', 8)
+    .attr('fill', function(n) {
+      var nd = nodeMap[n.id] || {};
+      return nd.color || '#64748b';
+    })
+    .attr('stroke', function(n) {
+      var nd = nodeMap[n.id] || {};
+      var color = nd.color || '#64748b';
+      return d3.color(color).darker(0.5);
+    })
+    .attr('stroke-width', 1.5);
+
+  // Draw node label
+  nodeGroups.append('text')
+    .attr('class', 'node-label')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'central')
+    .attr('y', 1)
+    .each(function(n) {
+      var label = (nodeMap[n.id] || {}).label || n.id;
+      var name = label.length > 18 ? label.substring(0, 16) + '…' : label;
+      d3.select(this).text(name);
+    });
+
+  // Tooltip on hover
+  nodeGroups.append('title').text(function(n) {
+    var nd = nodeMap[n.id] || {};
+    return nd.title || nd.label || n.id;
+  });
+
+  // Update node count
+  document.getElementById('nodeCount').textContent = rawData.nodes.length + ' nodes · ' + rawData.edges.length + ' edges';
+
+  // Zoom controls
+  document.getElementById('zoomIn').addEventListener('click', function() {
+    svg.transition().call(zoom.scaleBy, 1.3);
+  });
+  document.getElementById('zoomOut').addEventListener('click', function() {
+    svg.transition().call(zoom.scaleBy, 0.75);
+  });
+  document.getElementById('zoomFit').addEventListener('click', function() {
+    svg.transition().call(zoom.transform, d3.zoomIdentity);
   });
 </script>
 </body>
@@ -400,59 +524,26 @@ _VIS_HTML = r"""
 """
 
 
-_HEALTH_BORDER = {
-    HEALTHY: "#16a34a",
-    SEMI_DOC: "#ca8a04",
-    SEMI_TEST: "#ea580c",
-    UNHEALTHY: "#dc2626",
-    SOURCE: "#2563eb",
-    EXPOSURE: "#9333ea",
-}
-
-
 def render_with_vis_html(
     nodes: list[DagNode], edges: list[DagEdge]
 ) -> str:
-    """Build a self-contained HTML string for the vis-network DAG."""
+    """Build a self-contained HTML string using d3-dag with sugiyama layout."""
     payload = {
         "nodes": [
             {
                 "id": n.id,
-                "label": f"<b>{n.label}</b>",
-                "color": {
-                    "background": n.color,
-                    "border": _HEALTH_BORDER.get(n.id.split(".")[0], n.color),
-                    "highlight": {"background": n.color, "border": "#d4af37"},
-                },
-                "borderWidth": 2,
-                "borderWidthSelected": 3,
-                "font": {
-                    "color": "#f8fafc",
-                    "size": 13,
-                    "face": "Inter, -apple-system, sans-serif",
-                    "strokeWidth": 3,
-                    "strokeColor": "rgba(15,23,42,0.9)",
-                },
-                "shadow": {"enabled": True, "color": "rgba(0,0,0,0.5)", "size": 10, "x": 0, "y": 4},
+                "label": n.label,
+                "color": n.color,
                 "title": n.title,
-                "shape": n.shape,
-                "size": 22,
-                "margin": {"top": 8, "right": 12, "bottom": 8, "left": 12},
             }
             for n in nodes
         ],
         "edges": [
-            {
-                "from": e.source,
-                "to": e.target,
-                "color": {"color": "rgba(148,163,184,0.5)", "highlight": "#d4af37", "hover": "#d4af37"},
-                "width": 1.5,
-                "arrows": {"to": {"enabled": True, "scaleFactor": 0.6}},
-            }
+            {"source": e.source, "target": e.target}
             for e in edges
         ],
     }
-    return _VIS_HTML.replace("__DATA__", json.dumps(payload))
+    return _DAG_HTML.replace("__DATA__", json.dumps(payload))
 
 
 # ---------------------------------------------------------------------------
@@ -463,8 +554,9 @@ def render_with_vis_html(
 def render_dag(snapshot: ProjectSnapshot) -> None:
     """Render the DAG inside a Streamlit app.
 
-    Tries ``streamlit-agraph`` first. Falls back to a self-contained
-    ``vis-network`` HTML block via ``st.components.v1.html``.
+    Uses d3-dag with the sugiyama algorithm for clean hierarchical
+    left-to-right layout. Rendered as a self-contained HTML block
+    via st.components.v1.html.
     """
     import streamlit as st
 
@@ -473,17 +565,8 @@ def render_dag(snapshot: ProjectSnapshot) -> None:
         st.info("No models in this manifest to render.")
         return
 
-    try:
-        render_with_agraph(nodes, edges)
-        return
-    except Exception as exc:  # noqa: BLE001
-        st.warning(
-            f"streamlit-agraph not available ({exc.__class__.__name__}). "
-            "Falling back to embedded vis-network."
-        )
-
     html = render_with_vis_html(nodes, edges)
-    st.components.v1.html(html, height=720, scrolling=False)
+    st.components.v1.html(html, height=750, scrolling=False)
 
 
 __all__ = [
