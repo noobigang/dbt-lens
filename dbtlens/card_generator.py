@@ -168,11 +168,6 @@ def generate_card(
     # ── Left gold accent stripe ─────────────────────────────────────────────
     draw.rectangle((0, 0, 5, CARD_H), fill=ACCENT)
 
-    # Subtle diagonal highlight on left side
-    for i in range(80):
-        alpha = 8 + i // 4
-        draw.line([(i, 0), (i + 60, CARD_H)], fill=(212, 175, 55, alpha))  # type: ignore
-
     # ── TOP ROW: Brand ─────────────────────────────────────────────────────
     brand_f = _font(_FONT_BOLD, 38)
     draw.text((30, 35), "dbt Lens", font=brand_f, fill=ACCENT)
