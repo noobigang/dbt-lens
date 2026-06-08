@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  PYTHON_VERSION: "3.11"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Cache pip packages
         uses: actions/cache@v4
@@ -29,19 +33,18 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Lint with ruff
-        run: |
-          pip install ruff
-          ruff check .
+        run: ruff check dbtlens/ app.py
 
       - name: Type check with mypy
-        run: |
-          pip install mypy
-          mypy dbtlens/ --ignore-missing-imports
+        run: mypy dbtlens/ --ignore-missing-imports
 
-      - name: Run app smoke test
-        run: |
-          pip install streamlit
-          timeout 15 streamlit run app.py --server.headless true --server.port 8501 || true
+      - name: CLI smoke test
+        run: python -m dbtlens data/fixture_manifest.json --json > /dev/null
+
+      - name: App smoke test
+        run: timeout 20 streamlit run app.py --server.headless true --server.port 8501 || true
