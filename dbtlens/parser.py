@@ -369,7 +369,7 @@ def parse_manifest(manifest: dict[str, Any]) -> ProjectSnapshot:
             continue
         sname = s.get("name", "")
         source_name = s.get("source_name", "")
-        identifier = s.get("identifier", sname)
+        identifier = s.get("identifier") or sname
         description = (s.get("description") or "").strip()
         # Columns on sources
         src_cols: list[ColumnInfo] = []

@@ -86,7 +86,7 @@ def _load_font(candidates: Iterable[str], size: int) -> ImageFont.FreeTypeFont:
                     return ImageFont.truetype(path, size=size)
                 except OSError:
                     continue
-    return ImageFont.load_default()
+    return ImageFont.load_default()  # type: ignore[return-value]
 
 
 def _score_color(score: int) -> tuple[int, int, int]:
@@ -100,14 +100,14 @@ def _score_color(score: int) -> tuple[int, int, int]:
 def _gradient_bg(w: int, h: int) -> Image.Image:
     """Build a vertical gradient from BG_TOP to BG_BOT."""
     img = Image.new("RGB", (w, h), BG_TOP)
-    px = img.load()
+    px = img.load()  # type: ignore[assignment]
     for y in range(h):
         t = y / max(1, h - 1)
         r = int(BG_TOP[0] * (1 - t) + BG_BOT[0] * t)
         g = int(BG_TOP[1] * (1 - t) + BG_BOT[1] * t)
         b = int(BG_TOP[2] * (1 - t) + BG_BOT[2] * t)
         for x in range(w):
-            px[x, y] = (r, g, b)
+            px[x, y] = (r, g, b)  # type: ignore[index]
     return img
 
 
@@ -136,7 +136,8 @@ def _draw_text_left(
 ) -> tuple[int, int]:
     """Draw text at (left, top); returns (w, h) of the rendered glyphs."""
     bbox = draw.textbbox((0, 0), text, font=font)
-    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    w = int(bbox[2] - bbox[0])
+    h = int(bbox[3] - bbox[1])
     draw.text((left - bbox[0], top - bbox[1]), text, font=font, fill=fill)
     return w, h
 
