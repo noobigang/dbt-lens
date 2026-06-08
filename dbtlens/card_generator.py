@@ -26,7 +26,7 @@ BG_BOT = (18, 28, 55)       # dark blue bottom
 ACCENT = (212, 175, 55)     # gold
 ACCENT_DIM = (155, 128, 38) # darker gold
 TEXT_PRIMARY = (248, 250, 252)
-TEXT_SECONDARY = (90, 105, 130)
+TEXT_SECONDARY = (140, 155, 185)  # brighter gray for readability
 PANEL_BG = (25, 38, 68)
 BAR_BG = (40, 55, 85)
 GREEN = (34, 197, 94)
@@ -284,7 +284,7 @@ def generate_card(
             (px_start + 82 + fw + 6, feat_y), detail,
             font=feat_reg_f, fill=TEXT_SECONDARY
         )
-        feat_y += 58
+        feat_y += 52
 
     # Divider
     feat_y += 5
@@ -313,7 +313,7 @@ def generate_card(
         col_gap = (CARD_W - px_start - 80) // 2 - 10
 
         bx3 = px_start + 40 + col * col_gap
-        by3 = feat_y + row * 62
+        by3 = feat_y + row * 46
 
         # bar background
         bar_w = bar_max_w // 2 - 10
