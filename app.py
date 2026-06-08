@@ -477,18 +477,30 @@ def _render_fixes(score: scorer.HealthScore) -> None:
 
 
 def _render_share_card(score: scorer.HealthScore) -> None:
-    """Render the share-card preview + download button."""
-    st.subheader("📤 Share your score")
+    """Render the promo card preview + download button.
+
+    This is a TOOL PROMO card — the right viral loop is "share the tool",
+    not "share your score". Nobody posts their internal code health score.
+    """
+    st.subheader("📤 dbt Lens promo card")
+    st.markdown(
+        "<span style='font-size:0.82rem; color:#64748b;'>"
+        "Use this card to share dbt Lens with your network — "
+        "it's a tool promo, not a personal score card. "
+        "Copy-paste the link in your post: <b>dbt-lens.streamlit.app</b>"
+        "</span>",
+        unsafe_allow_html=True,
+    )
     img = card_generator.generate_card(
         project_name=score.project_name,
         score=score.total,
         grade=score.grade,
     )
-    st.image(img, caption="1200×630 — sized for LinkedIn and Twitter.", width=600)
+    st.image(img, caption="1200×630 — ready for LinkedIn and Twitter.", width=600)
     st.download_button(
-        "⬇️ Download score card (PNG)",
+        "⬇️ Download promo card (PNG)",
         data=card_generator.card_to_bytes(img),
-        file_name=f"dbt-lens-{score.project_name}-{score.total}.png",
+        file_name="dbt-lens-promo-card.png",
         mime="image/png",
         use_container_width=False,
     )
