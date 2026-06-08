@@ -113,8 +113,7 @@ def load_fixture() -> bytes:
 @st.cache_data
 def load_famous_projects():
     """Return the configured famous projects, with JSON override support."""
-    override = famous_projects.maybe_load_from_json(FAMOUS_PROJECTS_PATH)
-    return override if override is not None else famous_projects.get_famous_projects()
+    return famous_projects.get_famous_projects(FAMOUS_PROJECTS_PATH)
 
 
 def _render_hero_input() -> tuple[bytes | None, str | None]:
@@ -490,10 +489,13 @@ def _render_share_card(score: scorer.HealthScore) -> None:
         "</span>",
         unsafe_allow_html=True,
     )
+    # Build real dimension scores for the bar chart
+    dim_scores = [(d.earned, d.possible) for d in score.dimensions]
     img = card_generator.generate_card(
         project_name=score.project_name,
         score=score.total,
         grade=score.grade,
+        dimension_scores=dim_scores,
     )
     st.image(img, caption="1200×630 — ready for LinkedIn and Twitter.", width=600)
     st.download_button(

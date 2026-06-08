@@ -13,6 +13,7 @@ manifest shape.
 from __future__ import annotations
 
 import json
+import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -445,14 +446,46 @@ def parse_manifest_bytes(data: bytes) -> ProjectSnapshot:
     return parse_manifest(json.loads(data.decode("utf-8")))
 
 
+# ---------------------------------------------------------------------------
+# URL allowlist — domains from which dbt Lens will fetch manifest.json
+# ---------------------------------------------------------------------------
+
+ALLOWED_URL_HOSTS: frozenset[str] = frozenset({
+    # GitHub
+    "github.com",
+    "raw.githubusercontent.com",
+    # GitLab
+    "gitlab.com",
+    "gitlab.com/raw",          # gitlab.com/-/raw/... style URLs
+    # Bitbucket
+    "bitbucket.org",
+    "bitbucket.org/raw",       # bitbucket.org/<owner>/<repo>/raw/... style
+})
+
+def _maybe_rewrite_url(url: str) -> str:
+    """Rewrite blob URLs to raw content URLs for known hosts."""
+    parsed = urllib.parse.urlparse(url)
+    hostname = parsed.hostname or ""
+    path = parsed.path
+
+    if "github.com" in hostname and "/blob/" in path:
+        return _github_to_raw(url)
+    if "gitlab.com" in hostname and "/-/blob/" in path:
+        # https://gitlab.com/owner/repo/-/blob/branch/path -> https://gitlab.com/owner/repo/-/raw/branch/path
+        return url.replace("/-/blob/", "/-/raw/", 1)
+    if "bitbucket.org" in hostname and "/src/" in path:
+        # https://bitbucket.org/owner/repo/src/branch/path -> keep as-is (Bitbucket src URLs work directly)
+        return url
+    return url
+
+
 def parse_manifest_url(url: str) -> ProjectSnapshot:
     """Fetch a manifest.json from a public URL and parse it.
 
     Supports:
-    - Direct URLs to manifest.json on github.com or raw.githubusercontent.com
-    - ``https://github.com/<owner>/<repo>/...`` — will be rewritten to the
-      corresponding ``raw.githubusercontent.com`` URL if the path includes
-      ``/blob/``.
+    - Direct URLs to manifest.json on github.com, gitlab.com, bitbucket.org
+    - ``https://github.com/<owner>/<repo>/blob/...`` → rewritten to raw URL
+    - ``https://gitlab.com/<owner>/<repo>/-/blob/...`` → rewritten to raw URL
 
     Args:
         url: HTTP(S) URL pointing at a manifest.json.
@@ -461,18 +494,20 @@ def parse_manifest_url(url: str) -> ProjectSnapshot:
         A :class:`ProjectSnapshot`.
 
     Raises:
-        RuntimeError: if the fetch or parse fails.
+        RuntimeError: if the host is not in the allowlist or fetch fails.
     """
     import urllib.request
 
-    final_url = _github_to_raw(url)
-    # SSRF prevention: only allow known-safe GitHub domains
-    allowed_hosts = {"github.com", "raw.githubusercontent.com"}
+    final_url = _maybe_rewrite_url(url)
     parsed = urllib.parse.urlparse(final_url)
-    if parsed.hostname not in allowed_hosts:
+    hostname = parsed.hostname or ""
+
+    # Normalise: strip port, lowercase
+    host_key = hostname.split(":")[0].lower()
+    if host_key not in ALLOWED_URL_HOSTS:
         raise RuntimeError(
-            f"URL must point to github.com or raw.githubusercontent.com. "
-            f"Got: {parsed.hostname}"
+            f"URL host '{host_key}' is not in the allowlist. "
+            f"Supported hosts: {', '.join(sorted(ALLOWED_URL_HOSTS))}"
         )
     try:
         with urllib.request.urlopen(final_url, timeout=30) as resp:

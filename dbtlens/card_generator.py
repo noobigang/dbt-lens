@@ -145,6 +145,7 @@ def generate_card(
     *,
     footer_url: str = "dbt-lens.streamlit.app",
     grade: str | None = None,
+    dimension_scores: list[tuple[float, float]] | None = None,
 ) -> Image.Image:
     """Render a 1200x630 share card."""
     letter = grade if grade is not None else score_to_grade(score)
@@ -300,14 +301,28 @@ def generate_card(
         font=dim_head_f, fill=TEXT_SECONDARY
     )
 
-    # Mini bar chart — proportional bars based on score tiers
+    # Mini bar chart — filled to the actual earned/possible ratio
     feat_y += 52
 
-    # Score tiers for visual bars (approximate relative weights)
-    bar_weights = [35, 20, 20, 10, 10, 5]
+    # dimension_scores: list of (earned, possible) per dimension
+    # Falls back to static weight proportions when not provided
+    if dimension_scores is None:
+        bar_weights = [35, 20, 20, 10, 10, 5]
+        bar_max_total = 35.0
+        dims_data = [
+            (DIM_LABELS[i], bar_weights[i] / bar_max_total, bar_weights[i])
+            for i in range(6)
+        ]
+    else:
+        dims_data = []
+        for i, (earned, possible) in enumerate(dimension_scores):
+            if i < len(DIM_LABELS):
+                ratio = earned / possible if possible > 0 else 0.0
+                dims_data.append((DIM_LABELS[i], ratio, earned))
+
     bar_max_w = CARD_W - px_start - 90
 
-    for i, (d_name, base_w) in enumerate(zip(DIM_LABELS, bar_weights)):
+    for i, (d_name, fill_ratio, earned) in enumerate(dims_data):
         row = i // 2
         col = i % 2
         col_gap = (CARD_W - px_start - 80) // 2 - 10
@@ -323,17 +338,18 @@ def generate_card(
             radius=6, fill=BAR_BG
         )
 
-        # filled portion (proportional to base_w / total)
-        fill_ratio = base_w / 35.0  # normalize to max weight
+        # filled portion — proportional to earned/possible, colored by %
         fill_w = int(bar_w * fill_ratio)
         if fill_w > 0:
-            fill_color = _score_color(score)
+            # Color based on this dimension's own score
+            dim_pct = int(fill_ratio * 100)
+            fill_color = _score_color(dim_pct)
             draw.rounded_rectangle(
                 [bx3, by3 + 18, bx3 + fill_w, by3 + 18 + bar_h],
                 radius=6, fill=fill_color
             )
 
-        # label
+        # label with earned value
         d_f = _font(_FONT_REG, 17)
         draw.text((bx3, by3), d_name, font=d_f, fill=TEXT_PRIMARY)
 

@@ -65,8 +65,35 @@ FAMOUS_PROJECTS: tuple[FamousProject, ...] = (
 )
 
 
-def get_famous_projects() -> tuple[FamousProject, ...]:
-    """Return the canonical list of famous projects."""
+def get_famous_projects(
+    override_path: str | Path | None = None,
+) -> tuple[FamousProject, ...]:
+    """Return the canonical list of famous projects.
+
+    If ``override_path`` is provided and the file exists, scores are loaded
+    from there instead of the module-level placeholders. This lets users
+    contribute real scores by running ``dbt parse`` on each repo and dropping
+    the results into ``data/famous_projects.json``.
+
+    If no override file is found, the module-level PLACEHOLDER values are
+    returned with a warning.
+    """
+    if override_path is None:
+        # Try the default override location
+        override_path = Path("data/famous_projects.json")
+
+    override = maybe_load_from_json(override_path)
+    if override is not None:
+        return override
+
+    import sys
+    print(
+        "WARNING: famous project scores are PLACEHOLDER values.\n"
+        "         Run `dbt parse` on each repo, compute real scores, then\n"
+        "         save them to data/famous_projects.json to contribute.\n"
+        "         See famous_projects.py for instructions.",
+        file=sys.stderr,
+    )
     return FAMOUS_PROJECTS
 
 
