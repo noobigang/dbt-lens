@@ -259,6 +259,38 @@ _DAG_HTML = r"""
   .edge-path { fill: none; stroke: #475569; stroke-width: 1.5px; }
   .edge-path:hover { stroke: #d4af37; stroke-width: 2.5px; }
   .arrow-marker { fill: #475569; }
+  .dag-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+  }
+  .dag-search-bar input {
+    flex: 1;
+    max-width: 280px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.07);
+    color: white;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .dag-search-bar input:focus { border-color: #d4af37; }
+  .dag-search-bar input::placeholder { color: rgba(255,255,255,0.35); }
+  .dag-search-count {
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    font-family: 'Inter', sans-serif;
+  }
+  .node-dimmed { opacity: 0.2 !important; }
+  .node-highlighted rect, .node-highlighted ellipse, .node-highlighted polygon {
+    stroke: #d4af37 !important;
+    stroke-width: 3px !important;
+  }
 </style>
 </head>
 <body>
@@ -266,6 +298,10 @@ _DAG_HTML = r"""
   <div class="dag-header">
     <div class="dag-title"><span>🔬</span> dbt Lens — Project DAG</div>
     <div class="dag-badge">Dagre Layout · Left-to-Right</div>
+  </div>
+  <div class="dag-search-bar">
+    <input type="text" id="dagSearch" placeholder="🔍 Search models…" autocomplete="off" />
+    <span class="dag-search-count" id="searchCount"></span>
   </div>
   <div id="lens-dag-container">
     <svg id="lens-dag"></svg>
@@ -490,16 +526,45 @@ _DAG_HTML = r"""
         .attr('stroke-width', 2);
     }
 
-    // Label — allow more characters with wider nodes + smaller font
+    // Label — escape HTML entities to prevent XSS from model names
+    var safeLabel = label
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
     ng.append('text')
       .attr('class', 'node-label')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
       .attr('y', 1)
-      .text(label.length > 20 ? label.substring(0, 18) + '…' : label);
+      .text(safeLabel.length > 20 ? safeLabel.substring(0, 18) + '…' : safeLabel);
 
     // Tooltip
     ng.append('title').text(title || label);
+  });
+
+  // Model search — type to highlight nodes, dim the rest
+  var searchInput = document.getElementById('dagSearch');
+  var searchCount = document.getElementById('searchCount');
+  var allNodes = mainGroup.selectAll('.node-group');
+
+  searchInput.addEventListener('input', function() {
+    var q = this.value.trim().toLowerCase();
+    if (!q) {
+      allNodes.each(function() {
+        d3.select(this).classed('node-dimmed', false).classed('node-highlighted', false);
+      });
+      if (searchCount) searchCount.textContent = '';
+      return;
+    }
+    var matches = 0;
+    allNodes.each(function(d) {
+      var hit = (d.label && d.label.toLowerCase().includes(q)) ||
+                (d.id && d.id.toLowerCase().includes(q));
+      d3.select(this).classed('node-dimmed', !hit).classed('node-highlighted', hit);
+      if (hit) matches++;
+    });
+    if (searchCount) searchCount.textContent = matches + ' match' + (matches !== 1 ? 'es' : '');
   });
 
   // Node shadow filter

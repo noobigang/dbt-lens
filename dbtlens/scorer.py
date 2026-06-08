@@ -719,7 +719,7 @@ exposures:
 
             snippet = ""
             if top_names:
-                ex = top_ll[0] if (top_ll := not_inc[:1]) else "fct_orders"
+                ex = top_names[0] if top_names else "fct_orders"
                 snippet = """\
 # In your model .sql file, change the config:
 

@@ -449,7 +449,7 @@ def parse_manifest_url(url: str) -> ProjectSnapshot:
     """Fetch a manifest.json from a public URL and parse it.
 
     Supports:
-    - Direct URLs to manifest.json
+    - Direct URLs to manifest.json on github.com or raw.githubusercontent.com
     - ``https://github.com/<owner>/<repo>/...`` — will be rewritten to the
       corresponding ``raw.githubusercontent.com`` URL if the path includes
       ``/blob/``.
@@ -466,6 +466,14 @@ def parse_manifest_url(url: str) -> ProjectSnapshot:
     import urllib.request
 
     final_url = _github_to_raw(url)
+    # SSRF prevention: only allow known-safe GitHub domains
+    allowed_hosts = {"github.com", "raw.githubusercontent.com"}
+    parsed = urllib.parse.urlparse(final_url)
+    if parsed.hostname not in allowed_hosts:
+        raise RuntimeError(
+            f"URL must point to github.com or raw.githubusercontent.com. "
+            f"Got: {parsed.hostname}"
+        )
     try:
         with urllib.request.urlopen(final_url, timeout=30) as resp:
             data = resp.read()

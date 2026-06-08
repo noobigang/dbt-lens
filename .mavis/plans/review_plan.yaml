@@ -1,0 +1,41 @@
+version: 1
+plan:
+  name: "dbt Lens expert review"
+  max_concurrency: 3
+  max_consecutive_failures: 3
+  max_cycles: 5
+
+tasks:
+  - id: ui-review
+    title: "UI/UX and share card design review"
+    prompt: |
+      You are a senior UI/UX designer reviewing dbt Lens.
+      Read: app.py, dbtlens/card_generator.py, dbtlens/dag_renderer.py, test_card_v2.png
+      Output: ui_review.md with scores out of 10, top 5 improvements, what is good
+    assigned_to: general
+    verified_by: verifier
+    verify_prompt: "Check that ui_review.md exists and has the required structure"
+    timeout_ms: 1800000
+
+  - id: code-review
+    title: "Code quality and architecture review"
+    prompt: |
+      You are a senior Python engineer reviewing dbt Lens.
+      Read: dbtlens/parser.py, scorer.py, card_generator.py, dag_renderer.py, famous_projects.py
+      Output: code_review.md with scores out of 10, top 5 bugs/improvements with file:line refs, security issues, crash risks
+    assigned_to: general
+    verified_by: verifier
+    verify_prompt: "Check that code_review.md exists and has the required structure"
+    timeout_ms: 1800000
+
+  - id: product-review
+    title: "Product features and scoring logic review"
+    prompt: |
+      You are a senior product engineer reviewing dbt Lens.
+      Read: dbtlens/scorer.py, dbtlens/famous_projects.py, app.py
+      Test: python -c "import sys; sys.path.insert(0,'.'); from dbtlens.parser import parse_manifest_bytes; from dbtlens.scorer import score_project; f=open('data/fixture_manifest.json','rb'); s=parse_manifest_bytes(f.read()); sc=score_project(s); print(f'Score: {sc.total}/100, Grade: {sc.grade}')"
+      Output: product_review.md with scores out of 10, top 5 improvements, what users would love, what would make them leave
+    assigned_to: general
+    verified_by: verifier
+    verify_prompt: "Check that product_review.md exists and has the required structure"
+    timeout_ms: 1800000
