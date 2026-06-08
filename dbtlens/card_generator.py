@@ -306,15 +306,13 @@ def generate_card(
 
     # dimension_scores: list of (earned, possible) per dimension
     # Falls back to static weight proportions when not provided
+    dims_data: list[tuple[str, float, float]] = []
     if dimension_scores is None:
         bar_weights = [35, 20, 20, 10, 10, 5]
         bar_max_total = 35.0
-        dims_data = [
-            (DIM_LABELS[i], bar_weights[i] / bar_max_total, bar_weights[i])
-            for i in range(6)
-        ]
+        for i in range(6):
+            dims_data.append((DIM_LABELS[i], bar_weights[i] / bar_max_total, float(bar_weights[i])))
     else:
-        dims_data = []
         for i, (earned, possible) in enumerate(dimension_scores):
             if i < len(DIM_LABELS):
                 ratio = earned / possible if possible > 0 else 0.0
