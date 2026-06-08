@@ -120,7 +120,7 @@ def generate_card(
         g = int(BG_TOP[1] + (BG_BOT[1] - BG_TOP[1]) * t)
         b = int(BG_TOP[2] + (BG_BOT[2] - BG_TOP[2]) * t)
         for x in range(CARD_W):
-            px[x, y] = (r, g, b)
+            px[x, y] = (r, g, b)  # type: ignore[index]
 
     # ── Left accent stripe ──────────────────────────────────────────────────
     draw.rectangle((0, 0, 7, CARD_H), fill=ACCENT)
