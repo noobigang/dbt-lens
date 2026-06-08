@@ -49,7 +49,6 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-  /* Import Inter font */
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
   /* Global body */
@@ -60,22 +59,19 @@ st.markdown("""
                 border-radius: 16px; padding: 32px 36px; margin-bottom: 24px;
                 border: 1px solid rgba(255,255,255,0.08); }
 
-  /* Score metric styling */
-  div[data-testid="stMetricValue"] { font-size: 2.8rem !important; font-weight: 800 !important; }
-
-  /* Section headers */
-  .st-emotion-cache-1v0fvj5 h2, .stMarkdown h2 { font-size: 1.25rem !important;
+  /* Section headers — use Streamlit's native st.header styling */
+  section[data-testid="stMainBlockContainer"] h1,
+  section[data-testid="stMainBlockContainer"] h2 { font-size: 1.1rem;
     font-weight: 700; color: #0f172a; border-bottom: 2px solid #d4af37;
-    padding-bottom: 8px; margin-bottom: 16px; }
+    padding-bottom: 6px; margin-bottom: 12px; }
 
-  /* Score table rows */
+  /* Score table rows hover */
   .stDataFrame tbody tr:hover { background: #fef9ee !important; }
 
-  /* Fix cards */
-  [data-testid="stHorizontalBlock"] [data-testid="stBlock"] > div {
-    border: 1px solid #e2e8f0 !important; border-radius: 12px !important; }
+  /* Fix cards — border and rounded corners */
+  [data-testid="stHorizontalBlock"] > div > div > div { border-radius: 12px; }
 
-  /* Sidebar styling */
+  /* Sidebar */
   section[data-testid="stSidebar"] { background: #f8fafc; }
 
   /* Download button */
@@ -87,14 +83,18 @@ st.markdown("""
   .stFileUploader { border: 2px dashed #d4af37 !important; border-radius: 12px !important;
                     padding: 16px !important; background: #fef9ee !important; }
 
-  /* Score grade badge coloring */
-  [data-testid="stMetricDelta"] { font-size: 1.1rem !important; }
-
   /* Progress bars */
   .stProgress { border-radius: 8px; overflow: hidden; }
 
   /* Subheaders */
   h3 { color: #334155 !important; font-weight: 600 !important; }
+
+  /* Metric values */
+  div[data-testid="stMetricValue"] { font-size: 2.8rem !important; font-weight: 800 !important; }
+
+  /* Tab styling */
+  .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+  .stTabs [data-baseweb="tab"] { border-radius: 8px 8px 0 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -160,8 +160,8 @@ def _render_hero_input() -> tuple[bytes | None, str | None]:
         <div class="hero-title">🔬 <span>dbt Lens</span></div>
         <div class="hero-sub">
             Drop your <code>manifest.json</code> → get a 0–100 health score, interactive DAG,
-            Top-3 fixes, and a shareable LinkedIn card.
-            <br>Or paste a GitHub URL — any public dbt project works.
+            Top-3 fixes, and a 1200×630 share card.
+            <br>Or paste a GitHub / GitLab / Bitbucket URL — any public dbt project works.
         </div>
     """, unsafe_allow_html=True)
 
@@ -176,9 +176,9 @@ def _render_hero_input() -> tuple[bytes | None, str | None]:
             label_visibility="collapsed",
         )
     with col2:
-        st.markdown('<span class="input-label">🔗 GitHub URL</span>', unsafe_allow_html=True)
+        st.markdown('<span class="input-label">🔗 URL</span>', unsafe_allow_html=True)
         url = st.text_input(
-            "…or paste a public GitHub URL to target/manifest.json",
+            "…or paste a public GitHub/GitLab/Bitbucket URL to manifest.json",
             placeholder="https://github.com/owner/repo/blob/main/target/manifest.json",
             key="manifest_url",
             label_visibility="collapsed",
@@ -213,14 +213,18 @@ def _render_hero_input() -> tuple[bytes | None, str | None]:
 
 
 def _render_sidebar() -> None:
-    """Render the sidebar with 'About' and 'How scoring works' expanders."""
+    """Render the sidebar with scoring guide, run locally, and about."""
     with st.sidebar:
         st.markdown("### 🔬 dbt Lens")
-        st.caption("v0.1.0 — A free dbt project health auditor.")
+        st.caption("v1.0 — Free dbt project health auditor")
         st.markdown(
-            "Paste a `manifest.json` to get a 0–100 health score, an "
-            "interactive DAG, a Top-3 fix list, and a shareable image."
+            "Drop a `manifest.json` → get a 0–100 health score, "
+            "interactive DAG, Top-3 fixes, and a share card."
         )
+
+        st.divider()
+        st.markdown("**Run locally**")
+        st.code("pip install -r requirements.txt\nstreamlit run app.py", language="bash")
 
         with st.expander("How scoring works", expanded=False):
             st.markdown(
@@ -247,10 +251,12 @@ def _render_sidebar() -> None:
         with st.expander("About", expanded=False):
             st.markdown(
                 """
-                dbt Lens is a **client-side** tool — your manifest is
-                parsed in your browser session, never uploaded anywhere.
+                **100% client-side** — your manifest is parsed in your
+                browser session, never uploaded anywhere.
 
-                Built with Streamlit. Source on GitHub.
+                No account. No database. No cookies.
+
+                [View source on GitHub](https://github.com/noobigang/dbt-lens)
                 """
             )
 
@@ -375,12 +381,13 @@ def _render_comparison(user_score: int, user_label: str) -> None:
     names = [r[0] for r in rows]
     scores = [r[1] for r in rows]
     is_user = [r[2] for r in rows]
+
     bar_colors = []
-    for u in is_user:
+    for (name, sc, u) in rows:
         if u:
-            bar_colors.append("#d4af37")   # gold for user
+            bar_colors.append("#d4af37")   # gold for user — always stands out
         else:
-            bar_colors.append("#94a3b8")   # slate for others
+            bar_colors.append("#94a3b8")   # slate for famous repos
 
     bars = ax.barh(range(len(rows)), scores, color=bar_colors, height=0.6, edgecolor="white", linewidth=1.5)
 
@@ -404,6 +411,11 @@ def _render_comparison(user_score: int, user_label: str) -> None:
     ax.set_xticklabels(["0", "25", "50", "75", "100"], color="#94a3b8", fontsize=10)
     ax.grid(axis="x", color="#e2e8f0", linewidth=0.8, linestyle="--")
     ax.set_axisbelow(True)
+
+    # Add a colored background strip to show score zones
+    ax.axvspan(0, 40, alpha=0.06, color="#dc2626")
+    ax.axvspan(40, 70, alpha=0.04, color="#ca8a04")
+    ax.axvspan(70, 100, alpha=0.04, color="#16a34a")
 
     plt.tight_layout(pad=1.5)
     st.pyplot(fig, use_container_width=True)
@@ -459,8 +471,8 @@ def _render_fixes(score: scorer.HealthScore) -> None:
                 names = " · ".join(f"`{m}`" for m in fix.affected_models)
                 st.markdown(
                     f"<div style='margin-top:8px; margin-bottom:4px;'>"
-                    f"<span style='font-size:0.78rem; font-weight:700; color:#64748b;'>"
-                    f"AFFECTED MODELS:</span>  {names}</div>",
+                    f"<span style='font-size:0.78rem; font-weight:600; color:#64748b;'>"
+                    f"Models to fix:</span>  {names}</div>",
                     unsafe_allow_html=True,
                 )
 
@@ -485,7 +497,7 @@ def _render_share_card(score: scorer.HealthScore) -> None:
         "<span style='font-size:0.82rem; color:#64748b;'>"
         "Use this card to share dbt Lens with your network — "
         "it's a tool promo, not a personal score card. "
-        "Copy-paste the link in your post: <b>dbt-lens.streamlit.app</b>"
+        "Copy-paste the link in your post: <b>dbt-lens-ewpztmgj8ppbnlk5ddyvsy.streamlit.app</b>"
         "</span>",
         unsafe_allow_html=True,
     )
@@ -497,7 +509,7 @@ def _render_share_card(score: scorer.HealthScore) -> None:
         grade=score.grade,
         dimension_scores=dim_scores,
     )
-    st.image(img, caption="1200×630 — ready for LinkedIn and Twitter.", width=600)
+    st.image(img, caption="1200×630 share card", width=600)
     st.download_button(
         "⬇️ Download promo card (PNG)",
         data=card_generator.card_to_bytes(img),

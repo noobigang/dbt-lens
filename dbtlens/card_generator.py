@@ -1,6 +1,6 @@
 """Generate a 1200x630 PNG share card for dbt Lens.
 
-Card dimensions match LinkedIn/Twitter link preview spec (1200x630).
+Card dimensions: 1200x630 (standard social sharing size).
 Output is a PIL Image ready for st.download_button or file save.
 """
 
@@ -143,7 +143,7 @@ def generate_card(
     project_name: str,
     score: int,
     *,
-    footer_url: str = "dbt-lens.streamlit.app",
+    footer_url: str = "dbt-lens-ewpztmgj8ppbnlk5ddyvsy.streamlit.app",
     grade: str | None = None,
     dimension_scores: list[tuple[float, float]] | None = None,
 ) -> Image.Image:

@@ -1,6 +1,6 @@
 # 🔬 dbt Lens
 
-**Drop your `manifest.json` → get a 0–100 health score, an interactive DAG, and a shareable LinkedIn card. Free. No login. Instant.**
+**Drop your `manifest.json` → get a 0–100 health score, an interactive DAG, Top-3 fixes, and a shareable 1200×630 card. Free. No login. Instant.**
 
 ![dbt Lens banner](data/banner.png)
 
@@ -29,7 +29,7 @@ Click **"Load example project"** — no upload needed. The bundled demo scores *
 | 🕸 **Interactive DAG** | Color-coded lineage map — zoom, drag, explore |
 | 📊 **Compare to Famous Projects** | See how you stack up against jaffle_shop, dbt-utils, dbt-expectations |
 | 🛠 **Top 3 Fixes** | Highest-impact changes ranked by point recovery |
-| 📤 **Share Card** | 1200×630 PNG — sized for LinkedIn and Twitter |
+| 📤 **Share Card** | 1200×630 PNG — standard social sharing size |
 
 ---
 
@@ -101,7 +101,7 @@ Six weighted dimensions, summing to 100 points:
 
 ## 🖼 Sample output
 
-**Share card** (1200×630 — ready for LinkedIn):
+**Share card** (1200×630):
 ![dbt Lens share card](data/sample_score_card.png)
 
 **Score header** (the first thing you see after uploading a manifest):
