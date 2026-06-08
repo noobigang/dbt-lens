@@ -1,8 +1,7 @@
-"""Generate a 1200x630 PNG share card for a project's health score.
+"""Generate a 1200x630 PNG share card for dbt Lens.
 
-The card dimensions (1200x630) are the canonical size for LinkedIn and
-Twitter link previews. The output is a :class:`PIL.Image.Image` ready to
-be saved to a file or served via ``st.download_button``.
+Card dimensions match LinkedIn/Twitter link preview spec (1200x630).
+Output is a PIL Image ready for st.download_button or file save.
 """
 
 from __future__ import annotations
@@ -21,22 +20,21 @@ from PIL import Image, ImageDraw, ImageFont
 CARD_W = 1200
 CARD_H = 630
 
-# Colors
-BG_TOP = (15, 23, 42)  # slate-900
-BG_BOT = (30, 41, 59)  # slate-800
-ACCENT = (212, 175, 55)  # gold — dbt brand
-TEXT_PRIMARY = (248, 250, 252)  # slate-50
-TEXT_SECONDARY = (148, 163, 184)  # slate-400
+# Palette
+BG_TOP = (10, 14, 25)       # deep navy
+BG_BOT = (20, 28, 50)        # dark blue
+ACCENT = (212, 175, 55)     # gold
+ACCENT_DARK = (155, 128, 38) # darker gold for borders
+TEXT_PRIMARY = (248, 250, 252)
+TEXT_SECONDARY = (100, 116, 139)
 WHITE = (255, 255, 255)
-
-# Score color bands
-SCORE_RED = (239, 68, 68)
-SCORE_YELLOW = (234, 179, 8)
-SCORE_GREEN = (34, 197, 94)
+PANEL_BG = (30, 40, 65)
+DIM_BG = (40, 50, 80)
+GREEN = (34, 197, 94)
 
 
 # ---------------------------------------------------------------------------
-# Font loading
+# Font helpers
 # ---------------------------------------------------------------------------
 
 _FONT_DIRS = [
@@ -47,105 +45,56 @@ _FONT_DIRS = [
     "/System/Library/Fonts",
 ]
 
-_FONT_CANDIDATES_BOLD = [
-    "arialbd.ttf",
-    "Arial-Bold.ttf",
-    "Arial Bold.ttf",
-    "DejaVuSans-Bold.ttf",
-    "Helvetica-Bold.ttf",
-]
-
-_FONT_CANDIDATES_REG = [
-    "arial.ttf",
-    "Arial.ttf",
-    "DejaVuSans.ttf",
-    "Helvetica.ttf",
-]
-
-_FONT_CANDIDATES_LIGHT = [
-    "seguisb.ttf",
-    "Segoe-UI-Light.ttf",
-    "Arial Light.ttf",
-    "DejaVuSans.ttf",
-]
+_FONT_BOLD = ["arialbd.ttf", "Arial-Bold.ttf", "DejaVuSans-Bold.ttf", "Helvetica-Bold.ttf"]
+_FONT_REG = ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf", "Helvetica.ttf"]
+_FONT_LIGHT = ["seguisb.ttf", "Arial-Light.ttf", "Arial Light.ttf", "DejaVuSans.ttf"]
 
 
-def _load_font(candidates: Iterable[str], size: int) -> ImageFont.FreeTypeFont:
-    """Load the first available TTF from ``candidates``.
-
-    Falls back to PIL's load_default() if nothing matches — that font has
-    a fixed size and limited coverage, but the card still renders.
-    """
+def _font(candidates: list[str], size: int) -> ImageFont.FreeTypeFont:
     for d in _FONT_DIRS:
         if not d or not os.path.isdir(d):
             continue
         for c in candidates:
-            path = os.path.join(d, c)
-            if os.path.isfile(path):
+            p = os.path.join(d, c)
+            if os.path.isfile(p):
                 try:
-                    return ImageFont.truetype(path, size=size)
+                    return ImageFont.truetype(p, size=size)
                 except OSError:
                     continue
     return ImageFont.load_default()  # type: ignore[return-value]
 
 
-def _score_color(score: int) -> tuple[int, int, int]:
-    if score < 50:
-        return SCORE_RED
-    if score < 75:
-        return SCORE_YELLOW
-    return SCORE_GREEN
+def _rounded(img: Image.Image, color: tuple[int, int, int],
+            bounds: tuple[int, int, int, int], radius: int) -> None:
+    """Draw a rounded rectangle using a clip mask."""
+    x0, y0, x1, y1 = bounds
+    mask = Image.new("L", img.size, 0)
+    md = ImageDraw.Draw(mask)
+    md.rounded_rectangle(bounds, radius=radius, fill=255)
+    # paste with alpha
+    under = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ud = ImageDraw.Draw(under)
+    ud.rounded_rectangle(bounds, radius=radius, fill=(*color, 255))
+    img.paste(under, (0, 0), mask)
 
 
-def _gradient_bg(w: int, h: int) -> Image.Image:
-    """Build a vertical gradient from BG_TOP to BG_BOT."""
-    img = Image.new("RGB", (w, h), BG_TOP)
-    px = img.load()  # type: ignore[assignment]
-    for y in range(h):
-        t = y / max(1, h - 1)
-        r = int(BG_TOP[0] * (1 - t) + BG_BOT[0] * t)
-        g = int(BG_TOP[1] * (1 - t) + BG_BOT[1] * t)
-        b = int(BG_TOP[2] * (1 - t) + BG_BOT[2] * t)
-        for x in range(w):
-            px[x, y] = (r, g, b)  # type: ignore[index]
-    return img
-
-
-def _draw_text_centered(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.FreeTypeFont,
-    center: tuple[int, int],
-    fill: tuple[int, int, int],
-) -> None:
-    """Draw text centered on (cx, cy)."""
-    bbox = draw.textbbox((0, 0), text, font=font)
-    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = center[0] - w // 2 - bbox[0]
-    y = center[1] - h // 2 - bbox[1]
+def _text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont,
+          x: int, y: int, fill: tuple[int, int, int]) -> None:
     draw.text((x, y), text, font=font, fill=fill)
 
 
-def _draw_text_left(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.FreeTypeFont,
-    left: int,
-    top: int,
-    fill: tuple[int, int, int],
-) -> tuple[int, int]:
-    """Draw text at (left, top); returns (w, h) of the rendered glyphs."""
+def _text_centered(draw: ImageDraw.ImageDraw, text: str,
+                   font: ImageFont.FreeTypeFont, cx: int, cy: int,
+                   fill: tuple[int, int, int]) -> None:
     bbox = draw.textbbox((0, 0), text, font=font)
-    w = int(bbox[2] - bbox[0])
-    h = int(bbox[3] - bbox[1])
-    draw.text((left - bbox[0], top - bbox[1]), text, font=font, fill=fill)
-    return w, h
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    draw.text((cx - tw // 2, cy - th // 2), text, font=font, fill=fill)
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Card generation
 # ---------------------------------------------------------------------------
-
 
 def generate_card(
     project_name: str,
@@ -154,136 +103,145 @@ def generate_card(
     footer_url: str = "dbt-lens.streamlit.app",
     grade: str | None = None,
 ) -> Image.Image:
-    """Render the 1200x630 share card.
+    """Render a 1200x630 share card.
 
-    This is a PRODUCT DEMO card — it shows both the tool AND an example
-    score so people can see what the output looks like. The viral hook
-    is "I built this / here's a useful tool" not "here's my grade".
+    This is a TOOL PROMO card — shows a compelling example score (78/B)
+    so people see the value immediately. Viral hook = "I built this / try it"
+    not "here's my personal score".
     """
-    img = _gradient_bg(CARD_W, CARD_H)
+    # ── Background ──────────────────────────────────────────────────────────
+    img = Image.new("RGB", (CARD_W, CARD_H), BG_TOP)
     draw = ImageDraw.Draw(img)
+    # Vertical gradient
+    px = img.load()  # type: ignore[assignment]
+    for y in range(CARD_H):
+        t = y / (CARD_H - 1)
+        r = int(BG_TOP[0] + (BG_BOT[0] - BG_TOP[0]) * t)
+        g = int(BG_TOP[1] + (BG_BOT[1] - BG_TOP[1]) * t)
+        b = int(BG_TOP[2] + (BG_BOT[2] - BG_TOP[2]) * t)
+        for x in range(CARD_W):
+            px[x, y] = (r, g, b)
 
-    # ── Accent stripe on left edge ─────────────────────────────────────
-    draw.rectangle((0, 0, 10, CARD_H), fill=ACCENT)
+    # ── Left accent stripe ──────────────────────────────────────────────────
+    draw.rectangle((0, 0, 7, CARD_H), fill=ACCENT)
 
-    # ── TOP LEFT — Brand + tagline ──────────────────────────────────────
+    # ── TOP ROW: Brand ─────────────────────────────────────────────────────
+    brand_f = _font(_FONT_BOLD, 36)
+    draw.text((40, 40), "dbt Lens", font=brand_f, fill=ACCENT)
 
-    brand_font = _load_font(_FONT_CANDIDATES_BOLD, 34)
-    draw.text((46, 44), "dbt Lens", font=brand_font, fill=ACCENT)
+    tagline_f = _font(_FONT_REG, 22)
+    draw.text((40, 88), "Free dbt project health auditor", font=tagline_f, fill=TEXT_SECONDARY)
 
-    tagline_font = _load_font(_FONT_CANDIDATES_REG, 20)
-    draw.text((46, 90), "Free dbt project health auditor", font=tagline_font, fill=TEXT_SECONDARY)
+    # ── Divider ────────────────────────────────────────────────────────────
+    draw.rectangle((40, 130, 580, 131), fill=(50, 60, 90))
 
-    # ── LEFT — Example score preview ───────────────────────────────────
+    # "EXAMPLE OUTPUT" label
+    label_f = _font(_FONT_BOLD, 15)
+    draw.text((40, 142), "EXAMPLE OUTPUT", font=label_f, fill=TEXT_SECONDARY)
 
-    # Thin divider
-    draw.rectangle((46, 130, 580, 131), fill=(51, 65, 85))
+    # ── LEFT: Big score circle ─────────────────────────────────────────────
+    # Draw score circle background
+    cx, cy = 210, 300
+    r_outer = 130
+    # outer glow ring
+    for i in range(4):
+        rr = r_outer + i * 3
+        draw.ellipse([cx - rr, cy - rr, cx + rr, cy + rr],
+                     outline=(*ACCENT, 60 - i * 15))
 
-    # "Example output" label
-    label_font = _load_font(_FONT_CANDIDATES_BOLD, 14)
-    draw.text((46, 142), "EXAMPLE OUTPUT", font=label_font, fill=TEXT_SECONDARY)
+    # score circle
+    draw.ellipse([cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer],
+                 fill=(30, 40, 65), outline=ACCENT, width=4)
 
-    # Big score
-    big_score_font = _load_font(_FONT_CANDIDATES_BOLD, 120)
-    score_color = _score_color(score)
-    draw.text((46, 165), str(score), font=big_score_font, fill=score_color)
+    # Example score: 78
+    big_f = _font(_FONT_BOLD, 90)
+    draw.text((cx - 60, cy - 65), "78", font=big_f, fill=GREEN)
 
-    # "/100"
-    slash_font = _load_font(_FONT_CANDIDATES_REG, 40)
-    bbox = draw.textbbox((0, 0), str(score), font=big_score_font)
-    sw = bbox[2] - bbox[0]
-    draw.text((46 + sw + 14, 225), "/100", font=slash_font, fill=TEXT_SECONDARY)
+    # "/100" below circle
+    slash_f = _font(_FONT_REG, 24)
+    draw.text((cx - 22, cy + 60), "/100", font=slash_f, fill=TEXT_SECONDARY)
 
-    # Grade circle
-    if grade:
-        grade_font = _load_font(_FONT_CANDIDATES_BOLD, 80)
-        badge_r = 40
-        badge_cx = 46 + sw + 100
-        badge_cy = 220
-        draw.ellipse(
-            [badge_cx - badge_r, badge_cy - badge_r,
-             badge_cx + badge_r, badge_cy + badge_r],
-            fill=ACCENT,
-        )
-        tb_g = draw.textbbox((0, 0), grade, font=grade_font)
-        gw = tb_g[2] - tb_g[0]
-        gh = tb_g[3] - tb_g[1]
-        draw.text(
-            (badge_cx - gw // 2 - tb_g[0], badge_cy - gh // 2 - tb_g[1]),
-            grade, font=grade_font, fill=(15, 23, 42)
-        )
+    # Grade badge
+    badge_f = _font(_FONT_BOLD, 48)
+    bx, by = 330, 230
+    draw.ellipse([bx - 36, by - 36, bx + 36, by + 36], fill=ACCENT)
+    draw.text((bx - 16, by - 28), "B", font=badge_f, fill=(15, 23, 42))
 
-    # Verdict below score
-    verdict = _verdict_for(score)
-    verdict_font = _load_font(_FONT_CANDIDATES_REG, 20)
-    draw.text((46, 320), verdict, font=verdict_font, fill=TEXT_SECONDARY)
+    # Verdict
+    verdict_f = _font(_FONT_REG, 22)
+    draw.text((40, 465), "Healthy. A few polish items.", font=verdict_f, fill=TEXT_SECONDARY)
 
-    # "6 dimensions" stat row below verdict
-    dim_font = _load_font(_FONT_CANDIDATES_BOLD, 18)
-    dim_label = _load_font(_FONT_CANDIDATES_REG, 16)
-    dim_items = [
-        ("6", "dimensions"),
-        ("0", "login"),
-        ("100%", "client-side"),
-    ]
-    dx = 46
-    for val, lbl in dim_items:
-        draw.text((dx, 360), val, font=dim_font, fill=ACCENT)
-        tb_d = draw.textbbox((0, 0), val, font=dim_font)
-        vw2 = tb_d[2] - tb_d[0]
-        draw.text((dx + vw2 + 4, 362), lbl, font=dim_label, fill=TEXT_SECONDARY)
-        dx += 130
+    # Stats row
+    stat_val_f = _font(_FONT_BOLD, 22)
+    stat_lbl_f = _font(_FONT_REG, 18)
+    stats = [("6", "dimensions"), ("0", "login"), ("100%", "client-side")]
+    sx = 40
+    for val, lbl in stats:
+        draw.text((sx, 510), val, font=stat_val_f, fill=ACCENT)
+        tb = draw.textbbox((0, 0), val, font=stat_val_f)
+        draw.text((sx + (tb[2] - tb[0]) + 6, 513), lbl, font=stat_lbl_f, fill=TEXT_SECONDARY)
+        sx += 150
 
-    # ── CTA at bottom left ─────────────────────────────────────────────
-
-    cta_x, cta_y = 46, CARD_H - 100
-    cta_font = _load_font(_FONT_CANDIDATES_BOLD, 22)
-    draw.rounded_rectangle([cta_x, cta_y, cta_x + 350, cta_y + 58],
+    # CTA button — bottom left
+    cta_f = _font(_FONT_BOLD, 24)
+    btn_x, btn_y = 40, CARD_H - 80
+    # shadow
+    draw.rounded_rectangle([btn_x + 3, btn_y + 3, btn_x + 380, btn_y + 63],
+                            radius=12, fill=(0, 0, 0, 80))
+    draw.rounded_rectangle([btn_x, btn_y, btn_x + 380, btn_y + 60],
                             radius=12, fill=ACCENT)
-    tb_cta = draw.textbbox((0, 0), "Scan your project free", font=cta_font)
-    ctw = tb_cta[2] - tb_cta[0]
-    draw.text((cta_x + 175 - ctw // 2 - tb_cta[0], cta_y + 14),
-              "Scan your project free", font=cta_font, fill=(15, 23, 42))
+    tb = draw.textbbox((0, 0), "Scan your project free", font=cta_f)
+    tw = tb[2] - tb[0]
+    draw.text((btn_x + 190 - tw // 2 - tb[0], btn_y + 14),
+              "Scan your project free", font=cta_f, fill=(15, 23, 42))
 
-    # ── RIGHT PANEL — What it does ─────────────────────────────────────
+    # ── RIGHT PANEL ─────────────────────────────────────────────────────────
+    px_start = 600
+    # panel shadow
+    draw.rounded_rectangle([px_start + 4, 100 + 4, CARD_W - 24, CARD_H - 24],
+                            radius=20, fill=(0, 0, 0, 60))
+    draw.rounded_rectangle([px_start, 100, CARD_W - 28, CARD_H - 28],
+                            radius=20, fill=PANEL_BG)
 
-    panel_x = 600
+    # "What you get" header
+    head_f = _font(_FONT_BOLD, 26)
+    draw.text((px_start + 40, 130), "What you get", font=head_f, fill=TEXT_PRIMARY)
 
-    draw.rounded_rectangle(
-        (panel_x, 100, CARD_W - 30, CARD_H - 30),
-        radius=18, fill=(30, 41, 59)
-    )
-
-    # Panel header
-    panel_head_font = _load_font(_FONT_CANDIDATES_BOLD, 22)
-    draw.text((panel_x + 36, 124), "What you get", font=panel_head_font, fill=TEXT_PRIMARY)
-
-    # Feature list with icons
+    # Feature list
     features = [
         ("0-100 health score", "across 6 weighted dimensions"),
         ("Interactive DAG", "color-coded by health status"),
         ("Top 3 fixes", "with copy-paste YAML/SQL code"),
         ("Score breakdown", "per dimension with notes"),
     ]
-    feat_y = 175
-    feat_bold = _load_font(_FONT_CANDIDATES_BOLD, 18)
-    feat_reg = _load_font(_FONT_CANDIDATES_REG, 18)
+    feat_y = 180
+    feat_bold_f = _font(_FONT_BOLD, 20)
+    feat_reg_f = _font(_FONT_REG, 20)
+    check_f = _font(_FONT_BOLD, 16)
+
     for label, detail in features:
-        # Check circle
-        draw.ellipse([panel_x + 36, feat_y, panel_x + 58, feat_y + 22], fill=ACCENT)
-        check_f = _load_font(_FONT_CANDIDATES_BOLD, 13)
-        draw.text((panel_x + 44, feat_y + 1), "✓", font=check_f, fill=(15, 23, 42))
-        draw.text((panel_x + 70, feat_y), label, font=feat_bold, fill=TEXT_PRIMARY)
-        tb_f = draw.textbbox((0, 0), label, font=feat_bold)
-        fw = tb_f[2] - tb_f[0]
-        draw.text((panel_x + 70 + fw + 8, feat_y), detail, font=feat_reg, fill=TEXT_SECONDARY)
-        feat_y += 44
+        # check circle
+        draw.ellipse([px_start + 40, feat_y, px_start + 66, feat_y + 26],
+                     fill=ACCENT)
+        draw.text((px_start + 50, feat_y + 2), "✓", font=check_f, fill=(15, 23, 42))
+        draw.text((px_start + 78, feat_y), label, font=feat_bold_f, fill=TEXT_PRIMARY)
+        tb = draw.textbbox((0, 0), label, font=feat_bold_f)
+        fw = tb[2] - tb[0]
+        draw.text((px_start + 80 + fw + 8, feat_y), detail,
+                  font=feat_reg_f, fill=TEXT_SECONDARY)
+        feat_y += 52
 
-    # "6 dimensions" in panel
-    draw.rectangle((panel_x + 36, feat_y + 8, CARD_W - 66, feat_y + 9), fill=(51, 65, 85))
-    dim_heading = _load_font(_FONT_CANDIDATES_BOLD, 15)
-    draw.text((panel_x + 36, feat_y + 22), "6 SCORED DIMENSIONS", font=dim_heading, fill=TEXT_SECONDARY)
+    # Divider
+    feat_y += 8
+    draw.rectangle((px_start + 40, feat_y, CARD_W - 68, feat_y + 1),
+                   fill=(50, 60, 90))
 
+    # "6 SCORED DIMENSIONS" heading
+    dim_head_f = _font(_FONT_BOLD, 15)
+    draw.text((px_start + 40, feat_y + 16), "6 SCORED DIMENSIONS",
+              font=dim_head_f, fill=TEXT_SECONDARY)
+
+    # Dimension pills — cleaner, bigger
     dims = [
         ("Test Coverage", "35 pts"),
         ("Documentation", "20 pts"),
@@ -292,36 +250,42 @@ def generate_card(
         ("Exposures", "10 pts"),
         ("Materialization", "5 pts"),
     ]
-    col_w = (CARD_W - panel_x - 72) // 3
+    feat_y += 52
+    col_w = (CARD_W - px_start - 80) // 3 - 8
+
     for i, (d_name, d_pts) in enumerate(dims):
-        cx = panel_x + 36 + (i % 3) * (col_w + 8)
-        cy = feat_y + 50 + (i // 3) * 40
-        draw.rounded_rectangle([cx, cy, cx + col_w, cy + 32],
-                                radius=6, fill=(51, 65, 85))
-        d_font = _load_font(_FONT_CANDIDATES_REG, 14)
-        draw.text((cx + 8, cy + 7), d_name, font=d_font, fill=TEXT_PRIMARY)
-        draw.text((cx + col_w - 8 - (len(d_pts) * 9), cy + 7), d_pts,
-                  font=d_font, fill=ACCENT)
+        col = i % 3
+        row = i // 3
+        cx = px_start + 40 + col * (col_w + 8)
+        cy = feat_y + row * 52
+        draw.rounded_rectangle([cx, cy, cx + col_w, cy + 44],
+                                radius=8, fill=DIM_BG)
+        d_f = _font(_FONT_REG, 17)
+        draw.text((cx + 12, cy + 8), d_name, font=d_f, fill=TEXT_PRIMARY)
+        tb = draw.textbbox((0, 0), d_pts, font=d_f)
+        draw.text((cx + col_w - (tb[2] - tb[0]) - 12, cy + 8),
+                  d_pts, font=d_f, fill=ACCENT)
 
-    # CTA button at bottom of panel
-    cta2_y = CARD_H - 100
-    cta2_font = _load_font(_FONT_CANDIDATES_BOLD, 22)
-    draw.rounded_rectangle(
-        [panel_x + 36, cta2_y, panel_x + 36 + 460, cta2_y + 58],
-        radius=12, fill=ACCENT
-    )
-    tb2 = draw.textbbox((0, 0), "Try it — dbt-lens.streamlit.app", font=cta2_font)
+    # CTA button — bottom right panel
+    cta2_f = _font(_FONT_BOLD, 22)
+    cta2_y = CARD_H - 120
+    # shadow
+    draw.rounded_rectangle([px_start + 44, cta2_y + 3, CARD_W - 72, cta2_y + 63],
+                            radius=12, fill=(0, 0, 0, 80))
+    draw.rounded_rectangle([px_start + 40, cta2_y, CARD_W - 76, cta2_y + 60],
+                            radius=12, fill=ACCENT)
+    cta2_text = "Try it — dbt-lens.streamlit.app"
+    tb2 = draw.textbbox((0, 0), cta2_text, font=cta2_f)
     tb2w = tb2[2] - tb2[0]
-    draw.text((panel_x + 36 + 230 - tb2w // 2 - tb2[0], cta2_y + 14),
-              "Try it — dbt-lens.streamlit.app", font=cta2_font, fill=(15, 23, 42))
+    draw.text((px_start + 40 + (CARD_W - px_start - 116) // 2 - tb2w // 2 - tb2[0],
+               cta2_y + 15), cta2_text, font=cta2_f, fill=(15, 23, 42))
 
-    # ── Footer ─────────────────────────────────────────────────────────
-    footer_font = _load_font(_FONT_CANDIDATES_REG, 16)
-    footer_text = "github.com/noobigang/dbt-lens"
-    tb_f = draw.textbbox((0, 0), footer_text, font=footer_font)
+    # ── Footer ─────────────────────────────────────────────────────────────
+    footer_f = _font(_FONT_REG, 18)
+    ft = "github.com/noobigang/dbt-lens"
+    tb_f = draw.textbbox((0, 0), ft, font=footer_f)
     fw = tb_f[2] - tb_f[0]
-    draw.text((CARD_W - fw - 40, CARD_H - 42), footer_text,
-              font=footer_font, fill=TEXT_SECONDARY)
+    draw.text((CARD_W - fw - 40, CARD_H - 46), ft, font=footer_f, fill=TEXT_SECONDARY)
 
     return img
 
@@ -339,21 +303,16 @@ def _verdict_for(score: int) -> str:
 
 
 def card_to_bytes(img: Image.Image, *, fmt: str = "PNG") -> bytes:
-    """Serialize a card image to bytes (in-memory)."""
     buf = io.BytesIO()
     img.save(buf, format=fmt)
     return buf.getvalue()
 
 
 def save_card(img: Image.Image, path: str) -> None:
-    """Save a card image to disk as PNG."""
     img.save(path, format="PNG")
 
 
 __all__ = [
-    "generate_card",
-    "card_to_bytes",
-    "save_card",
-    "CARD_W",
-    "CARD_H",
+    "generate_card", "card_to_bytes", "save_card",
+    "CARD_W", "CARD_H",
 ]

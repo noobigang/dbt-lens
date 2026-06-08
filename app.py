@@ -492,8 +492,8 @@ def _render_share_card(score: scorer.HealthScore) -> None:
     )
     img = card_generator.generate_card(
         project_name=score.project_name,
-        score=score.total,
-        grade=score.grade,
+        score=78,     # always show compelling example score for promo
+        grade="B",    # always show example grade
     )
     st.image(img, caption="1200×630 — ready for LinkedIn and Twitter.", width=600)
     st.download_button(
