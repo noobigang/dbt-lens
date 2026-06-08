@@ -13,7 +13,6 @@ The app accepts a ``manifest.json`` via:
 from __future__ import annotations
 
 import json
-from io import BytesIO
 from pathlib import Path
 
 import pandas as pd

@@ -8,7 +8,6 @@ be saved to a file or served via ``st.download_button``.
 from __future__ import annotations
 
 import io
-import math
 import os
 from typing import Iterable
 
@@ -300,8 +299,6 @@ def generate_card(
                                 radius=6, fill=(51, 65, 85))
         d_font = _load_font(_FONT_CANDIDATES_REG, 14)
         draw.text((cx + 8, cy + 7), d_name, font=d_font, fill=TEXT_PRIMARY)
-        tb_d = draw.textbbox((0, 0), d_name, font=d_font)
-        dw = tb_d[2] - tb_d[0]
         draw.text((cx + col_w - 8 - (len(d_pts) * 9), cy + 7), d_pts,
                   font=d_font, fill=ACCENT)
 

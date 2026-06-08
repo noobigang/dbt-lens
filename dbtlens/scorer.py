@@ -22,9 +22,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any
 
-from .parser import ModelNode, ProjectSnapshot
+from .parser import ProjectSnapshot
 
 
 # ---------------------------------------------------------------------------
@@ -721,14 +720,14 @@ exposures:
             snippet = ""
             if top_names:
                 ex = top_ll[0] if (top_ll := not_inc[:1]) else "fct_orders"
-                snippet = f"""\
+                snippet = """\
 # In your model .sql file, change the config:
 
 # Before (rebuilds from scratch every run):
-{{{{ config(materialized='table') }}}}
+{{ config(materialized='table') }}
 
 # After (appends new rows only — much faster in production):
-{{{{ config(materialized='incremental', unique_key='id') }}}}
+{{ config(materialized='incremental', unique_key='id') }}
 
 # Or in dbt_project.yml for all models in a directory:
 models:
