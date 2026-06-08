@@ -156,7 +156,7 @@ _DAG_HTML = r"""
     box-shadow: 0 25px 50px rgba(0,0,0,0.4);
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: 850px;
     position: relative;
   }
   .dag-header {
@@ -193,9 +193,10 @@ _DAG_HTML = r"""
     border-radius: 10px;
     border: 1px solid rgba(255,255,255,0.06);
     background: rgba(255,255,255,0.02);
-    overflow: hidden;
+    overflow: auto;
+    min-height: 600px;
   }
-  #lens-dag { width: 100%; height: 100%; }
+  #lens-dag { width: 100%; height: 100%; min-height: 600px; }
   #lens-dag svg { display: block; }
 
   .legend {
@@ -371,10 +372,15 @@ _DAG_HTML = r"""
     maxY = Math.max(maxY, y + h/2);
   });
 
-  var graphW = maxX - minX + 80;
-  var graphH = maxY - minY + 80;
-  var offsetX = 50 - minX;
-  var offsetY = 30 - minY;
+  var graphW = maxX - minX + 120;
+  var graphH = maxY - minY + 120;
+  var offsetX = 60 - minX;
+  var offsetY = 60 - minY;
+
+  // Ensure SVG is big enough for the graph
+  var W = Math.max(container.clientWidth || 900, graphW);
+  var H = Math.max(container.clientHeight || 650, graphH);
+  svg.attr('width', W).attr('height', H);
 
   // Create main group with zoom
   var zoom = d3.zoom()
@@ -577,7 +583,7 @@ def render_dag(snapshot: ProjectSnapshot) -> None:
         return
 
     html = render_with_vis_html(nodes, edges)
-    st.components.v1.html(html, height=750, scrolling=False)
+    st.components.v1.html(html, height=900, scrolling=False)
 
 
 __all__ = [
