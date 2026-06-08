@@ -21,16 +21,17 @@ CARD_W = 1200
 CARD_H = 630
 
 # Palette
-BG_TOP = (10, 14, 25)       # deep navy
-BG_BOT = (20, 28, 50)        # dark blue
+BG_TOP = (8, 12, 22)        # deep navy top
+BG_BOT = (18, 28, 55)       # dark blue bottom
 ACCENT = (212, 175, 55)     # gold
-ACCENT_DARK = (155, 128, 38) # darker gold for borders
+ACCENT_DIM = (155, 128, 38) # darker gold
 TEXT_PRIMARY = (248, 250, 252)
-TEXT_SECONDARY = (100, 116, 139)
-WHITE = (255, 255, 255)
-PANEL_BG = (30, 40, 65)
-DIM_BG = (40, 50, 80)
+TEXT_SECONDARY = (90, 105, 130)
+PANEL_BG = (25, 38, 68)
+BAR_BG = (40, 55, 85)
 GREEN = (34, 197, 94)
+ORANGE = (249, 115, 22)
+RED = (239, 68, 68)
 
 
 # ---------------------------------------------------------------------------
@@ -65,22 +66,16 @@ def _font(candidates: list[str], size: int) -> ImageFont.FreeTypeFont:
 
 
 def _rounded(img: Image.Image, color: tuple[int, int, int],
-            bounds: tuple[int, int, int, int], radius: int) -> None:
+             bounds: tuple[int, int, int, int], radius: int) -> None:
     """Draw a rounded rectangle using a clip mask."""
     x0, y0, x1, y1 = bounds
     mask = Image.new("L", img.size, 0)
     md = ImageDraw.Draw(mask)
     md.rounded_rectangle(bounds, radius=radius, fill=255)
-    # paste with alpha
     under = Image.new("RGBA", img.size, (0, 0, 0, 0))
     ud = ImageDraw.Draw(under)
     ud.rounded_rectangle(bounds, radius=radius, fill=(*color, 255))
     img.paste(under, (0, 0), mask)
-
-
-def _text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont,
-          x: int, y: int, fill: tuple[int, int, int]) -> None:
-    draw.text((x, y), text, font=font, fill=fill)
 
 
 def _text_centered(draw: ImageDraw.ImageDraw, text: str,
@@ -111,6 +106,39 @@ def score_to_grade(s: int) -> str:
     return "F"
 
 
+def _score_color(s: int) -> tuple[int, int, int]:
+    if s >= 85:
+        return GREEN
+    if s >= 65:
+        return ACCENT
+    if s >= 45:
+        return ORANGE
+    return RED
+
+
+def _verdict_text(s: int) -> str:
+    if s >= 90:
+        return "Battle-tested dbt project. Ship it."
+    if s >= 75:
+        return "Healthy project. A few polish items."
+    if s >= 60:
+        return "Decent foundation. Real gaps to close."
+    if s >= 40:
+        return "Risky. Production data is exposed."
+    return "Critical. Do not trust the numbers yet."
+
+
+# Human-readable dimension names matching the 6 dimensions
+DIM_LABELS = [
+    "Test Coverage",
+    "Documentation",
+    "DAG Structure",
+    "Naming Conv.",
+    "Exposures",
+    "Materialization",
+]
+
+
 def generate_card(
     project_name: str,
     score: int,
@@ -119,209 +147,233 @@ def generate_card(
     grade: str | None = None,
 ) -> Image.Image:
     """Render a 1200x630 share card."""
-    # Resolve grade from score if not provided
     letter = grade if grade is not None else score_to_grade(score)
+    sc = _score_color(score)
+    verdict = _verdict_text(score)
+
     # ── Background ──────────────────────────────────────────────────────────
     img = Image.new("RGB", (CARD_W, CARD_H), BG_TOP)
     draw = ImageDraw.Draw(img)
+
     # Vertical gradient
     px = img.load()  # type: ignore[assignment]
     for y in range(CARD_H):
         t = y / (CARD_H - 1)
         r = int(BG_TOP[0] + (BG_BOT[0] - BG_TOP[0]) * t)
-        g = int(BG_TOP[1] + (BG_BOT[1] - BG_TOP[1]) * t)
+        gv = int(BG_TOP[1] + (BG_BOT[1] - BG_TOP[1]) * t)
         b = int(BG_TOP[2] + (BG_BOT[2] - BG_TOP[2]) * t)
         for x in range(CARD_W):
-            px[x, y] = (r, g, b)  # type: ignore[index]
+            px[x, y] = (r, gv, b)  # type: ignore[index]
 
-    # ── Left accent stripe ──────────────────────────────────────────────────
-    draw.rectangle((0, 0, 7, CARD_H), fill=ACCENT)
+    # ── Left gold accent stripe ─────────────────────────────────────────────
+    draw.rectangle((0, 0, 5, CARD_H), fill=ACCENT)
+
+    # Subtle diagonal highlight on left side
+    for i in range(80):
+        alpha = 8 + i // 4
+        draw.line([(i, 0), (i + 60, CARD_H)], fill=(212, 175, 55, alpha))  # type: ignore
 
     # ── TOP ROW: Brand ─────────────────────────────────────────────────────
-    brand_f = _font(_FONT_BOLD, 36)
-    draw.text((40, 40), "dbt Lens", font=brand_f, fill=ACCENT)
+    brand_f = _font(_FONT_BOLD, 38)
+    draw.text((30, 35), "dbt Lens", font=brand_f, fill=ACCENT)
 
     tagline_f = _font(_FONT_REG, 22)
-    draw.text((40, 88), "Free dbt project health auditor", font=tagline_f, fill=TEXT_SECONDARY)
+    draw.text((30, 85), "Free dbt project health auditor", font=tagline_f, fill=TEXT_SECONDARY)
 
-    # ── Divider ────────────────────────────────────────────────────────────
-    draw.rectangle((40, 130, 580, 131), fill=(50, 60, 90))
+    # Project name badge
+    badge_bg_f = _font(_FONT_REG, 18)
+    proj_text = f"  {project_name}  "
+    tb = draw.textbbox((0, 0), proj_text, font=badge_bg_f)
+    bw = tb[2] - tb[0] + 20
+    bh = tb[3] - tb[1] + 12
+    bx = CARD_W // 2 - bw // 2
+    by = 32
+    draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=8, fill=PANEL_BG)
+    draw.text((bx + 10, by + 4), proj_text.strip(), font=badge_bg_f, fill=TEXT_SECONDARY)
 
-    # "EXAMPLE OUTPUT" label
-    label_f = _font(_FONT_BOLD, 15)
-    draw.text((40, 142), "EXAMPLE OUTPUT", font=label_f, fill=TEXT_SECONDARY)
+    # ── LEFT: Score circle ──────────────────────────────────────────────────
+    cx, cy = 270, 330
+    r_outer = 150
 
-    # ── LEFT: Big score circle ─────────────────────────────────────────────
-    # Draw score circle background
-    cx, cy = 210, 300
-    r_outer = 130
-    # outer glow ring
-    for i in range(4):
-        rr = r_outer + i * 3
-        draw.ellipse([cx - rr, cy - rr, cx + rr, cy + rr],
-                     outline=(*ACCENT, 60 - i * 15))
+    # Outer glow rings
+    for i in range(6):
+        rr = r_outer + i * 4
+        draw.ellipse(
+            [cx - rr, cy - rr, cx + rr, cy + rr],
+            outline=(*ACCENT, 50 - i * 8)
+        )
 
-    # score circle
-    draw.ellipse([cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer],
-                 fill=(30, 40, 65), outline=ACCENT, width=4)
+    # Main circle
+    draw.ellipse(
+        [cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer],
+        fill=(20, 32, 60), outline=ACCENT, width=5
+    )
 
-    # Score number
-    big_f = _font(_FONT_BOLD, 90)
-    draw.text((cx - 60, cy - 65), str(score), font=big_f, fill=GREEN)
-
-    # "/100" below circle
-    slash_f = _font(_FONT_REG, 24)
-    draw.text((cx - 22, cy + 60), "/100", font=slash_f, fill=TEXT_SECONDARY)
-
-    # Grade badge
-    badge_f = _font(_FONT_BOLD, 48)
-    bx, by = 330, 230
-    draw.ellipse([bx - 36, by - 36, bx + 36, by + 36], fill=ACCENT)
-    draw.text((bx - 16, by - 28), letter, font=badge_f, fill=(15, 23, 42))
-
-    # Verdict
-    verdict_f = _font(_FONT_REG, 22)
-    if score >= 90:
-        verdict = "Battle-tested dbt project. Ship it."
-    elif score >= 75:
-        verdict = "Healthy project. A few polish items."
-    elif score >= 60:
-        verdict = "Decent foundation. Real gaps to close."
-    elif score >= 40:
-        verdict = "Risky. Production data is exposed."
-    else:
-        verdict = "Critical. Do not trust the numbers yet."
-    draw.text((40, 465), verdict, font=verdict_f, fill=TEXT_SECONDARY)
-
-    # Stats row
-    stat_val_f = _font(_FONT_BOLD, 22)
-    stat_lbl_f = _font(_FONT_REG, 18)
-    stats = [("6", "dimensions"), ("0", "login"), ("100%", "client-side")]
-    sx = 40
-    for val, lbl in stats:
-        draw.text((sx, 510), val, font=stat_val_f, fill=ACCENT)
-        tb = draw.textbbox((0, 0), val, font=stat_val_f)
-        draw.text((sx + (tb[2] - tb[0]) + 6, 513), lbl, font=stat_lbl_f, fill=TEXT_SECONDARY)
-        sx += 150
-
-    # CTA button — bottom left
-    cta_f = _font(_FONT_BOLD, 24)
-    btn_x, btn_y = 40, CARD_H - 80
-    # shadow
-    draw.rounded_rectangle([btn_x + 3, btn_y + 3, btn_x + 380, btn_y + 63],
-                            radius=12, fill=(0, 0, 0, 80))
-    draw.rounded_rectangle([btn_x, btn_y, btn_x + 380, btn_y + 60],
-                            radius=12, fill=ACCENT)
-    tb = draw.textbbox((0, 0), "Scan your project free", font=cta_f)
+    # Score number — centered, large
+    big_f = _font(_FONT_BOLD, 96)
+    score_str = str(score)
+    tb = draw.textbbox((0, 0), score_str, font=big_f)
     tw = tb[2] - tb[0]
-    draw.text((btn_x + 190 - tw // 2 - tb[0], btn_y + 14),
-              "Scan your project free", font=cta_f, fill=(15, 23, 42))
+    draw.text((cx - tw // 2, cy - 68), score_str, font=big_f, fill=sc)
+
+    # "/100" below
+    slash_f = _font(_FONT_REG, 26)
+    draw.text((cx - 26, cy + 65), "/100", font=slash_f, fill=TEXT_SECONDARY)
+
+    # Grade badge — top-right of circle
+    badge_f = _font(_FONT_BOLD, 52)
+    bx2 = cx + 105
+    by2 = cy - 115
+    # shadow
+    draw.ellipse([bx2 - 2, by2 + 2, bx2 + 42, by2 + 46], fill=(0, 0, 0, 80))
+    # gold circle
+    draw.ellipse([bx2 - 4, by2, bx2 + 40, by2 + 44], fill=ACCENT)
+    # letter
+    draw.text((bx2 - 1, by2 - 5), letter, font=badge_f, fill=(10, 15, 30))
+
+    # Verdict text
+    verdict_f = _font(_FONT_REG, 22)
+    draw.text((30, 500), verdict, font=verdict_f, fill=TEXT_SECONDARY)
+
+    # ── CTA button — bottom left ────────────────────────────────────────────
+    cta_f = _font(_FONT_BOLD, 26)
+    btn_x, btn_y = 30, 555
+    draw.rounded_rectangle(
+        [btn_x + 3, btn_y + 3, btn_x + 400, btn_y + 62], radius=12, fill=(0, 0, 0, 100)
+    )
+    draw.rounded_rectangle(
+        [btn_x, btn_y, btn_x + 400, btn_y + 60], radius=12, fill=ACCENT
+    )
+    cta_text = "Scan your project free"
+    tb = draw.textbbox((0, 0), cta_text, font=cta_f)
+    tw = tb[2] - tb[0]
+    draw.text((btn_x + 200 - tw // 2, btn_y + 14), cta_text, font=cta_f, fill=(10, 15, 30))
 
     # ── RIGHT PANEL ─────────────────────────────────────────────────────────
-    px_start = 600
-    # panel shadow
-    draw.rounded_rectangle([px_start + 4, 100 + 4, CARD_W - 24, CARD_H - 24],
-                            radius=20, fill=(0, 0, 0, 60))
-    draw.rounded_rectangle([px_start, 100, CARD_W - 28, CARD_H - 28],
-                            radius=20, fill=PANEL_BG)
+    px_start = 580
+
+    # Panel shadow + fill
+    draw.rounded_rectangle(
+        [px_start + 5, 25, CARD_W - 20, CARD_H - 20], radius=24, fill=(0, 0, 0, 70)
+    )
+    draw.rounded_rectangle(
+        [px_start, 20, CARD_W - 24, CARD_H - 24], radius=24, fill=PANEL_BG
+    )
 
     # "What you get" header
-    head_f = _font(_FONT_BOLD, 26)
-    draw.text((px_start + 40, 130), "What you get", font=head_f, fill=TEXT_PRIMARY)
+    head_f = _font(_FONT_BOLD, 28)
+    draw.text((px_start + 40, 50), "What you get", font=head_f, fill=TEXT_PRIMARY)
 
-    # Feature list
+    # Feature list with checkmarks
     features = [
         ("0-100 health score", "across 6 weighted dimensions"),
         ("Interactive DAG", "color-coded by health status"),
-        ("Top 3 fixes", "with copy-paste YAML/SQL code"),
+        ("Top fixes", "with copy-paste YAML / SQL code"),
         ("Score breakdown", "per dimension with notes"),
     ]
-    feat_y = 180
-    feat_bold_f = _font(_FONT_BOLD, 20)
-    feat_reg_f = _font(_FONT_REG, 20)
-    check_f = _font(_FONT_BOLD, 16)
+    feat_y = 110
+    feat_bold_f = _font(_FONT_BOLD, 21)
+    feat_reg_f = _font(_FONT_REG, 21)
+    check_f = _font(_FONT_BOLD, 17)
 
     for label, detail in features:
         # check circle
-        draw.ellipse([px_start + 40, feat_y, px_start + 66, feat_y + 26],
-                     fill=ACCENT)
-        draw.text((px_start + 50, feat_y + 2), "✓", font=check_f, fill=(15, 23, 42))
-        draw.text((px_start + 78, feat_y), label, font=feat_bold_f, fill=TEXT_PRIMARY)
+        draw.ellipse(
+            [px_start + 40, feat_y, px_start + 68, feat_y + 28], fill=ACCENT
+        )
+        draw.text((px_start + 50, feat_y + 2), "✓", font=check_f, fill=(10, 15, 30))
+        draw.text((px_start + 80, feat_y), label, font=feat_bold_f, fill=TEXT_PRIMARY)
         tb = draw.textbbox((0, 0), label, font=feat_bold_f)
         fw = tb[2] - tb[0]
-        draw.text((px_start + 80 + fw + 8, feat_y), detail,
-                  font=feat_reg_f, fill=TEXT_SECONDARY)
-        feat_y += 52
+        draw.text(
+            (px_start + 82 + fw + 6, feat_y), detail,
+            font=feat_reg_f, fill=TEXT_SECONDARY
+        )
+        feat_y += 58
 
     # Divider
-    feat_y += 8
-    draw.rectangle((px_start + 40, feat_y, CARD_W - 68, feat_y + 1),
-                   fill=(50, 60, 90))
+    feat_y += 5
+    draw.rectangle(
+        (px_start + 40, feat_y, CARD_W - 64, feat_y + 1), fill=(50, 60, 90)
+    )
 
     # "6 SCORED DIMENSIONS" heading
     dim_head_f = _font(_FONT_BOLD, 15)
-    draw.text((px_start + 40, feat_y + 16), "6 SCORED DIMENSIONS",
-              font=dim_head_f, fill=TEXT_SECONDARY)
+    draw.text(
+        (px_start + 40, feat_y + 14),
+        "6 SCORED DIMENSIONS",
+        font=dim_head_f, fill=TEXT_SECONDARY
+    )
 
-    # Dimension pills — cleaner, bigger
-    dims = [
-        ("Test Coverage", "35 pts"),
-        ("Documentation", "20 pts"),
-        ("DAG Structure", "20 pts"),
-        ("Naming", "10 pts"),
-        ("Exposures", "10 pts"),
-        ("Materialization", "5 pts"),
-    ]
+    # Mini bar chart — proportional bars based on score tiers
     feat_y += 52
-    col_w = (CARD_W - px_start - 80) // 3 - 8
 
-    for i, (d_name, d_pts) in enumerate(dims):
-        col = i % 3
-        row = i // 3
-        cx = px_start + 40 + col * (col_w + 8)
-        cy = feat_y + row * 52
-        draw.rounded_rectangle([cx, cy, cx + col_w, cy + 44],
-                                radius=8, fill=DIM_BG)
+    # Score tiers for visual bars (approximate relative weights)
+    bar_weights = [35, 20, 20, 10, 10, 5]
+    bar_max_w = CARD_W - px_start - 90
+
+    for i, (d_name, base_w) in enumerate(zip(DIM_LABELS, bar_weights)):
+        row = i // 2
+        col = i % 2
+        col_gap = (CARD_W - px_start - 80) // 2 - 10
+
+        bx3 = px_start + 40 + col * col_gap
+        by3 = feat_y + row * 62
+
+        # bar background
+        bar_w = bar_max_w // 2 - 10
+        bar_h = 18
+        draw.rounded_rectangle(
+            [bx3, by3 + 18, bx3 + bar_w, by3 + 18 + bar_h],
+            radius=6, fill=BAR_BG
+        )
+
+        # filled portion (proportional to base_w / total)
+        fill_ratio = base_w / 35.0  # normalize to max weight
+        fill_w = int(bar_w * fill_ratio)
+        if fill_w > 0:
+            fill_color = _score_color(score)
+            draw.rounded_rectangle(
+                [bx3, by3 + 18, bx3 + fill_w, by3 + 18 + bar_h],
+                radius=6, fill=fill_color
+            )
+
+        # label
         d_f = _font(_FONT_REG, 17)
-        draw.text((cx + 12, cy + 8), d_name, font=d_f, fill=TEXT_PRIMARY)
-        tb = draw.textbbox((0, 0), d_pts, font=d_f)
-        draw.text((cx + col_w - (tb[2] - tb[0]) - 12, cy + 8),
-                  d_pts, font=d_f, fill=ACCENT)
+        draw.text((bx3, by3), d_name, font=d_f, fill=TEXT_PRIMARY)
 
     # CTA button — bottom right panel
     cta2_f = _font(_FONT_BOLD, 22)
-    cta2_y = CARD_H - 120
-    # shadow
-    draw.rounded_rectangle([px_start + 44, cta2_y + 3, CARD_W - 72, cta2_y + 63],
-                            radius=12, fill=(0, 0, 0, 80))
-    draw.rounded_rectangle([px_start + 40, cta2_y, CARD_W - 76, cta2_y + 60],
-                            radius=12, fill=ACCENT)
-    cta2_text = "Try it — dbt-lens.streamlit.app"
+    cta2_y = CARD_H - 100
+    draw.rounded_rectangle(
+        [px_start + 44, cta2_y + 3, CARD_W - 68, cta2_y + 63],
+        radius=12, fill=(0, 0, 0, 80)
+    )
+    draw.rounded_rectangle(
+        [px_start + 40, cta2_y, CARD_W - 72, cta2_y + 60],
+        radius=12, fill=ACCENT
+    )
+    cta2_text = f"Try it \u2014 {footer_url}"
     tb2 = draw.textbbox((0, 0), cta2_text, font=cta2_f)
     tb2w = tb2[2] - tb2[0]
-    draw.text((px_start + 40 + (CARD_W - px_start - 116) // 2 - tb2w // 2 - tb2[0],
-               cta2_y + 15), cta2_text, font=cta2_f, fill=(15, 23, 42))
+    draw.text(
+        (
+            px_start + 40 + (CARD_W - px_start - 116) // 2 - tb2w // 2 - tb2[0],
+            cta2_y + 15,
+        ),
+        cta2_text, font=cta2_f, fill=(10, 15, 30)
+    )
 
     # ── Footer ─────────────────────────────────────────────────────────────
-    footer_f = _font(_FONT_REG, 18)
+    footer_f = _font(_FONT_REG, 17)
     ft = "github.com/noobigang/dbt-lens"
     tb_f = draw.textbbox((0, 0), ft, font=footer_f)
     fw = tb_f[2] - tb_f[0]
-    draw.text((CARD_W - fw - 40, CARD_H - 46), ft, font=footer_f, fill=TEXT_SECONDARY)
+    draw.text(
+        (CARD_W - fw - 36, CARD_H - 42), ft, font=footer_f, fill=TEXT_SECONDARY
+    )
 
     return img
-
-
-def _verdict_for(score: int) -> str:
-    if score >= 90:
-        return "Battle-tested dbt project."
-    if score >= 75:
-        return "Healthy. A few polish items."
-    if score >= 60:
-        return "Decent foundation, real gaps to close."
-    if score >= 40:
-        return "Risky. Production data is exposed."
-    return "Critical. Don't trust the numbers yet."
 
 
 def card_to_bytes(img: Image.Image, *, fmt: str = "PNG") -> bytes:
